@@ -2794,6 +2794,7 @@ void ScriptEditor::_make_script_list_context_menu() {
 	}
 
 	ScriptEditorBase *se = Object::cast_to<ScriptEditorBase>(tab_container->get_child(selected));
+	EditorHelp *eh = Object::cast_to<EditorHelp>(tab_container->get_child(selected));
 	if (se) {
 		context_menu->add_shortcut(ED_GET_SHORTCUT("script_editor/save"), FILE_SAVE);
 		context_menu->add_shortcut(ED_GET_SHORTCUT("script_editor/save_as"), FILE_SAVE_AS);
@@ -2801,6 +2802,9 @@ void ScriptEditor::_make_script_list_context_menu() {
 	context_menu->add_shortcut(ED_GET_SHORTCUT("script_editor/close_file"), FILE_CLOSE);
 	context_menu->add_shortcut(ED_GET_SHORTCUT("script_editor/close_all"), CLOSE_ALL);
 	context_menu->add_shortcut(ED_GET_SHORTCUT("script_editor/close_other_tabs"), CLOSE_OTHER_TABS);
+	if (eh) {
+		context_menu->add_shortcut(ED_GET_SHORTCUT("script_editor/close_docs"), CLOSE_DOCS);
+	}
 	context_menu->add_separator();
 	if (se) {
 		Ref<Script> scr = se->get_edited_resource();
