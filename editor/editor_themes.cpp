@@ -155,6 +155,7 @@ void editor_register_and_generate_icons(Ref<Theme> p_theme, bool p_dark_theme = 
 		ADD_CONVERT_COLOR(dark_icon_color_dictionary, "#8da5f3", "#3d64dd"); // 2D
 		ADD_CONVERT_COLOR(dark_icon_color_dictionary, "#4b70ea", "#1a3eac"); // 2D Dark
 		ADD_CONVERT_COLOR(dark_icon_color_dictionary, "#8eef97", "#2fa139"); // Control
+		ADD_CONVERT_COLOR(dark_icon_color_dictionary, "#ffdd65", "#ca8a04"); // Node warning
 
 		// Rainbow
 		ADD_CONVERT_COLOR(dark_icon_color_dictionary, "#ff4545", "#ff2929"); // Red
@@ -229,7 +230,6 @@ void editor_register_and_generate_icons(Ref<Theme> p_theme, bool p_dark_theme = 
 		exceptions.insert("StatusError");
 		exceptions.insert("StatusSuccess");
 		exceptions.insert("StatusWarning");
-		exceptions.insert("NodeWarning");
 		exceptions.insert("OverbrightIndicator");
 	}
 
@@ -380,6 +380,7 @@ Ref<Theme> create_editor_theme(const Ref<Theme> p_theme) {
 	const Color font_color = mono_color.lerp(base_color, 0.25);
 	const Color font_hover_color = mono_color.lerp(base_color, 0.125);
 	const Color font_disabled_color = Color(mono_color.r, mono_color.g, mono_color.b, 0.3);
+	const Color font_readonly_color = Color(mono_color.r, mono_color.g, mono_color.b, 0.65);
 	const Color selection_color = accent_color * Color(1, 1, 1, 0.4);
 	const Color disabled_color = mono_color.inverted().lerp(base_color, 0.7);
 	const Color disabled_bg_color = mono_color.inverted().lerp(base_color, 0.9);
@@ -1028,9 +1029,9 @@ Ref<Theme> create_editor_theme(const Ref<Theme> p_theme) {
 	theme->set_stylebox("read_only", "LineEdit", style_line_edit_disabled);
 	theme->set_icon("clear", "LineEdit", theme->get_icon("GuiClose", "EditorIcons"));
 	theme->set_color("read_only", "LineEdit", font_disabled_color);
-	theme->set_color("font_uneditable_color", "LineEdit", font_disabled_color);
 	theme->set_color("font_color", "LineEdit", font_color);
 	theme->set_color("font_selected_color", "LineEdit", mono_color);
+	theme->set_color("font_uneditable_color", "LineEdit", font_readonly_color);
 	theme->set_color("caret_color", "LineEdit", font_color);
 	theme->set_color("selection_color", "LineEdit", selection_color);
 	theme->set_color("clear_button_color", "LineEdit", font_color);
@@ -1044,6 +1045,7 @@ Ref<Theme> create_editor_theme(const Ref<Theme> p_theme) {
 	theme->set_icon("tab", "TextEdit", theme->get_icon("GuiTab", "EditorIcons"));
 	theme->set_icon("space", "TextEdit", theme->get_icon("GuiSpace", "EditorIcons"));
 	theme->set_color("font_color", "TextEdit", font_color);
+	theme->set_color("font_readonly_color", "LineEdit", font_readonly_color);
 	theme->set_color("caret_color", "TextEdit", font_color);
 	theme->set_color("selection_color", "TextEdit", selection_color);
 
@@ -1196,7 +1198,7 @@ Ref<Theme> create_editor_theme(const Ref<Theme> p_theme) {
 	style_tooltip->set_default_margin(SIDE_TOP, default_margin_size * EDSCALE * 0.5);
 	style_tooltip->set_default_margin(SIDE_RIGHT, default_margin_size * EDSCALE);
 	style_tooltip->set_default_margin(SIDE_BOTTOM, default_margin_size * EDSCALE * 0.5);
-	style_tooltip->set_bg_color(mono_color.inverted());
+	style_tooltip->set_bg_color(mono_color.inverted() * Color(1, 1, 1, 0.9));
 	style_tooltip->set_border_width_all(0);
 	theme->set_color("font_color", "TooltipLabel", font_hover_color);
 	theme->set_color("font_color_shadow", "TooltipLabel", Color(0, 0, 0, 0));

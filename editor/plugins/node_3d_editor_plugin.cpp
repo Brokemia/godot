@@ -107,8 +107,8 @@ void ViewportRotationControl::_notification(int p_what) {
 }
 
 void ViewportRotationControl::_draw() {
-	Vector2i center = get_size() / 2.0;
-	float radius = get_size().x / 2.0;
+	const Vector2i center = get_size() / 2.0;
+	const real_t radius = get_size().x / 2.0;
 
 	if (focused_axis > -2 || orbiting) {
 		draw_circle(center, radius, Color(0.5, 0.5, 0.5, 0.25));
@@ -140,24 +140,24 @@ void ViewportRotationControl::_draw_axis(const Axis2D &p_axis) {
 	}
 
 	if (front) {
-		String axis_name = direction == 0 ? "X" : (direction == 1 ? "Y" : "Z");
 		draw_circle(p_axis.screen_point, AXIS_CIRCLE_RADIUS, c);
-		draw_char(get_theme_font(SNAME("rotation_control"), SNAME("EditorFonts")), p_axis.screen_point + Vector2i(-4, 5) * EDSCALE, axis_name, "", get_theme_font_size(SNAME("rotation_control_size"), SNAME("EditorFonts")), Color(0.3, 0.3, 0.3));
+		if (positive) {
+			String axis_name = direction == 0 ? "X" : (direction == 1 ? "Y" : "Z");
+			draw_char(get_theme_font(SNAME("rotation_control"), SNAME("EditorFonts")), p_axis.screen_point + Vector2i(-4, 5) * EDSCALE, axis_name, "", get_theme_font_size(SNAME("rotation_control_size"), SNAME("EditorFonts")), Color(0.0, 0.0, 0.0));
+		}
 	} else {
 		draw_circle(p_axis.screen_point, AXIS_CIRCLE_RADIUS * (0.55 + (0.2 * (1.0 + p_axis.z_axis))), c);
 	}
 }
 
 void ViewportRotationControl::_get_sorted_axis(Vector<Axis2D> &r_axis) {
-	Vector2i center = get_size() / 2.0;
-	float radius = get_size().x / 2.0;
-
-	float axis_radius = radius - AXIS_CIRCLE_RADIUS - 2.0 * EDSCALE;
-	Basis camera_basis = viewport->to_camera_transform(viewport->cursor).get_basis().inverse();
+	const Vector2i center = get_size() / 2.0;
+	const real_t radius = get_size().x / 2.0 - AXIS_CIRCLE_RADIUS - 2.0 * EDSCALE;
+	const Basis camera_basis = viewport->to_camera_transform(viewport->cursor).get_basis().inverse();
 
 	for (int i = 0; i < 3; ++i) {
 		Vector3 axis_3d = camera_basis.get_axis(i);
-		Vector2i axis_vector = Vector2(axis_3d.x, -axis_3d.y) * axis_radius;
+		Vector2i axis_vector = Vector2(axis_3d.x, -axis_3d.y) * radius;
 
 		if (Math::abs(axis_3d.z) < 1.0) {
 			Axis2D pos_axis;
@@ -259,7 +259,7 @@ void ViewportRotationControl::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("_gui_input"), &ViewportRotationControl::_gui_input);
 }
 
-void Node3DEditorViewport::_update_camera(float p_interp_delta) {
+void Node3DEditorViewport::_update_camera(real_t p_interp_delta) {
 	bool is_orthogonal = camera->get_projection() == Camera3D::PROJECTION_ORTHOGONAL;
 
 	Cursor old_camera_cursor = camera_cursor;
@@ -279,7 +279,7 @@ void Node3DEditorViewport::_update_camera(float p_interp_delta) {
 			// We interpolate a different point here, because in freelook mode the focus point (cursor.pos) orbits around eye_pos
 			camera_cursor.eye_pos = old_camera_cursor.eye_pos.lerp(cursor.eye_pos, CLAMP(factor, 0, 1));
 
-			float orbit_inertia = EDITOR_GET("editors/3d/navigation_feel/orbit_inertia");
+			real_t orbit_inertia = EDITOR_GET("editors/3d/navigation_feel/orbit_inertia");
 			orbit_inertia = MAX(0.0001, orbit_inertia);
 			camera_cursor.x_rot = Math::lerp(old_camera_cursor.x_rot, cursor.x_rot, MIN(1.f, p_interp_delta * (1 / orbit_inertia)));
 			camera_cursor.y_rot = Math::lerp(old_camera_cursor.y_rot, cursor.y_rot, MIN(1.f, p_interp_delta * (1 / orbit_inertia)));
@@ -297,13 +297,13 @@ void Node3DEditorViewport::_update_camera(float p_interp_delta) {
 
 		} else {
 			//when not being manipulated, move softly
-			float free_orbit_inertia = EDITOR_GET("editors/3d/navigation_feel/orbit_inertia");
-			float free_translation_inertia = EDITOR_GET("editors/3d/navigation_feel/translation_inertia");
+			real_t free_orbit_inertia = EDITOR_GET("editors/3d/navigation_feel/orbit_inertia");
+			real_t free_translation_inertia = EDITOR_GET("editors/3d/navigation_feel/translation_inertia");
 			//when being manipulated, move more quickly
-			float manip_orbit_inertia = EDITOR_GET("editors/3d/navigation_feel/manipulation_orbit_inertia");
-			float manip_translation_inertia = EDITOR_GET("editors/3d/navigation_feel/manipulation_translation_inertia");
+			real_t manip_orbit_inertia = EDITOR_GET("editors/3d/navigation_feel/manipulation_orbit_inertia");
+			real_t manip_translation_inertia = EDITOR_GET("editors/3d/navigation_feel/manipulation_translation_inertia");
 
-			float zoom_inertia = EDITOR_GET("editors/3d/navigation_feel/zoom_inertia");
+			real_t zoom_inertia = EDITOR_GET("editors/3d/navigation_feel/zoom_inertia");
 
 			//determine if being manipulated
 			bool manipulated = Input::get_singleton()->get_mouse_button_mask() & (2 | 4);
@@ -311,8 +311,8 @@ void Node3DEditorViewport::_update_camera(float p_interp_delta) {
 			manipulated |= Input::get_singleton()->is_key_pressed(KEY_ALT);
 			manipulated |= Input::get_singleton()->is_key_pressed(KEY_CTRL);
 
-			float orbit_inertia = MAX(0.00001, manipulated ? manip_orbit_inertia : free_orbit_inertia);
-			float translation_inertia = MAX(0.0001, manipulated ? manip_translation_inertia : free_translation_inertia);
+			real_t orbit_inertia = MAX(0.00001, manipulated ? manip_orbit_inertia : free_orbit_inertia);
+			real_t translation_inertia = MAX(0.0001, manipulated ? manip_translation_inertia : free_translation_inertia);
 			zoom_inertia = MAX(0.0001, zoom_inertia);
 
 			camera_cursor.x_rot = Math::lerp(old_camera_cursor.x_rot, cursor.x_rot, MIN(1.f, p_interp_delta * (1 / orbit_inertia)));
@@ -327,7 +327,7 @@ void Node3DEditorViewport::_update_camera(float p_interp_delta) {
 			}
 
 			camera_cursor.pos = old_camera_cursor.pos.lerp(cursor.pos, MIN(1.f, p_interp_delta * (1 / translation_inertia)));
-			camera_cursor.distance = Math::lerp(old_camera_cursor.distance, cursor.distance, MIN(1.f, p_interp_delta * (1 / zoom_inertia)));
+			camera_cursor.distance = Math::lerp(old_camera_cursor.distance, cursor.distance, MIN((real_t)1.0, p_interp_delta * (1 / zoom_inertia)));
 		}
 	}
 
@@ -537,7 +537,7 @@ ObjectID Node3DEditorViewport::_select_ray(const Point2 &p_pos) {
 				continue;
 			}
 
-			float dist = pos.distance_to(point);
+			const real_t dist = pos.distance_to(point);
 
 			if (dist < 0) {
 				continue;
@@ -601,7 +601,7 @@ void Node3DEditorViewport::_find_items_at_pos(const Point2 &p_pos, Vector<_RayRe
 				continue;
 			}
 
-			float dist = pos.distance_to(point);
+			const real_t dist = pos.distance_to(point);
 
 			if (dist < 0) {
 				continue;
@@ -646,7 +646,7 @@ void Node3DEditorViewport::_select_region() {
 		return; //nothing really
 	}
 
-	float z_offset = MAX(0.0, 5.0 - get_znear());
+	const real_t z_offset = MAX(0.0, 5.0 - get_znear());
 
 	Vector3 box[4] = {
 		Vector3(
@@ -912,20 +912,19 @@ bool Node3DEditorViewport::_transform_gizmo_select(const Vector2 &p_screenpos, b
 	Vector3 ray = _get_ray(Vector2(p_screenpos.x, p_screenpos.y));
 
 	Transform3D gt = spatial_editor->get_gizmo_transform();
-	float gs = gizmo_scale;
 
 	if (spatial_editor->get_tool_mode() == Node3DEditor::TOOL_MODE_SELECT || spatial_editor->get_tool_mode() == Node3DEditor::TOOL_MODE_MOVE) {
 		int col_axis = -1;
-		float col_d = 1e20;
+		real_t col_d = 1e20;
 
 		for (int i = 0; i < 3; i++) {
-			Vector3 grabber_pos = gt.origin + gt.basis.get_axis(i) * gs * (GIZMO_ARROW_OFFSET + (GIZMO_ARROW_SIZE * 0.5));
-			float grabber_radius = gs * GIZMO_ARROW_SIZE;
+			const Vector3 grabber_pos = gt.origin + gt.basis.get_axis(i) * gizmo_scale * (GIZMO_ARROW_OFFSET + (GIZMO_ARROW_SIZE * 0.5));
+			const real_t grabber_radius = gizmo_scale * GIZMO_ARROW_SIZE;
 
 			Vector3 r;
 
 			if (Geometry3D::segment_intersects_sphere(ray_pos, ray_pos + ray * MAX_Z, grabber_pos, grabber_radius, &r)) {
-				float d = r.distance_to(ray_pos);
+				const real_t d = r.distance_to(ray_pos);
 				if (d < col_d) {
 					col_d = d;
 					col_axis = i;
@@ -944,17 +943,17 @@ bool Node3DEditorViewport::_transform_gizmo_select(const Vector2 &p_screenpos, b
 
 				// Allow some tolerance to make the plane easier to click,
 				// even if the click is actually slightly outside the plane.
-				const Vector3 grabber_pos = gt.origin + (ivec2 + ivec3) * gs * (GIZMO_PLANE_SIZE + GIZMO_PLANE_DST * 0.6667);
+				const Vector3 grabber_pos = gt.origin + (ivec2 + ivec3) * gizmo_scale * (GIZMO_PLANE_SIZE + GIZMO_PLANE_DST * 0.6667);
 
 				Vector3 r;
 				Plane plane(gt.origin, gt.basis.get_axis(i).normalized());
 
 				if (plane.intersects_ray(ray_pos, ray, &r)) {
-					float dist = r.distance_to(grabber_pos);
+					const real_t dist = r.distance_to(grabber_pos);
 					// Allow some tolerance to make the plane easier to click,
 					// even if the click is actually slightly outside the plane.
-					if (dist < (gs * GIZMO_PLANE_SIZE * 1.5)) {
-						float d = ray_pos.distance_to(r);
+					if (dist < (gizmo_scale * GIZMO_PLANE_SIZE * 1.5)) {
+						const real_t d = ray_pos.distance_to(r);
 						if (d < col_d) {
 							col_d = d;
 							col_axis = i;
@@ -991,12 +990,12 @@ bool Node3DEditorViewport::_transform_gizmo_select(const Vector2 &p_screenpos, b
 				continue;
 			}
 
-			float dist = r.distance_to(gt.origin);
-			Vector3 r_dir = (r - gt.origin).normalized();
+			const real_t dist = r.distance_to(gt.origin);
+			const Vector3 r_dir = (r - gt.origin).normalized();
 
 			if (_get_camera_normal().dot(r_dir) <= 0.005) {
-				if (dist > gs * (GIZMO_CIRCLE_SIZE - GIZMO_RING_HALF_WIDTH) && dist < gs * (GIZMO_CIRCLE_SIZE + GIZMO_RING_HALF_WIDTH)) {
-					float d = ray_pos.distance_to(r);
+				if (dist > gizmo_scale * (GIZMO_CIRCLE_SIZE - GIZMO_RING_HALF_WIDTH) && dist < gizmo_scale * (GIZMO_CIRCLE_SIZE + GIZMO_RING_HALF_WIDTH)) {
+					const real_t d = ray_pos.distance_to(r);
 					if (d < col_d) {
 						col_d = d;
 						col_axis = i;
@@ -1023,13 +1022,13 @@ bool Node3DEditorViewport::_transform_gizmo_select(const Vector2 &p_screenpos, b
 		float col_d = 1e20;
 
 		for (int i = 0; i < 3; i++) {
-			Vector3 grabber_pos = gt.origin + gt.basis.get_axis(i) * gs * GIZMO_SCALE_OFFSET;
-			float grabber_radius = gs * GIZMO_ARROW_SIZE;
+			const Vector3 grabber_pos = gt.origin + gt.basis.get_axis(i) * gizmo_scale * GIZMO_SCALE_OFFSET;
+			const real_t grabber_radius = gizmo_scale * GIZMO_ARROW_SIZE;
 
 			Vector3 r;
 
 			if (Geometry3D::segment_intersects_sphere(ray_pos, ray_pos + ray * MAX_Z, grabber_pos, grabber_radius, &r)) {
-				float d = r.distance_to(ray_pos);
+				const real_t d = r.distance_to(ray_pos);
 				if (d < col_d) {
 					col_d = d;
 					col_axis = i;
@@ -1043,22 +1042,22 @@ bool Node3DEditorViewport::_transform_gizmo_select(const Vector2 &p_screenpos, b
 			col_d = 1e20;
 
 			for (int i = 0; i < 3; i++) {
-				Vector3 ivec2 = gt.basis.get_axis((i + 1) % 3).normalized();
-				Vector3 ivec3 = gt.basis.get_axis((i + 2) % 3).normalized();
+				const Vector3 ivec2 = gt.basis.get_axis((i + 1) % 3).normalized();
+				const Vector3 ivec3 = gt.basis.get_axis((i + 2) % 3).normalized();
 
 				// Allow some tolerance to make the plane easier to click,
 				// even if the click is actually slightly outside the plane.
-				Vector3 grabber_pos = gt.origin + (ivec2 + ivec3) * gs * (GIZMO_PLANE_SIZE + GIZMO_PLANE_DST * 0.6667);
+				const Vector3 grabber_pos = gt.origin + (ivec2 + ivec3) * gizmo_scale * (GIZMO_PLANE_SIZE + GIZMO_PLANE_DST * 0.6667);
 
 				Vector3 r;
 				Plane plane(gt.origin, gt.basis.get_axis(i).normalized());
 
 				if (plane.intersects_ray(ray_pos, ray, &r)) {
-					float dist = r.distance_to(grabber_pos);
+					const real_t dist = r.distance_to(grabber_pos);
 					// Allow some tolerance to make the plane easier to click,
 					// even if the click is actually slightly outside the plane.
-					if (dist < (gs * GIZMO_PLANE_SIZE * 1.5)) {
-						float d = ray_pos.distance_to(r);
+					if (dist < (gizmo_scale * GIZMO_PLANE_SIZE * 1.5)) {
+						const real_t d = ray_pos.distance_to(r);
 						if (d < col_d) {
 							col_d = d;
 							col_axis = i;
@@ -1114,9 +1113,9 @@ Transform3D Node3DEditorViewport::_compute_transform(TransformMode p_mode, const
 					local_motion.snap(Vector3(p_extra, p_extra, p_extra));
 				}
 
-				Vector3 local_scale = p_original_local.basis.get_scale() * (local_motion + Vector3(1, 1, 1));
-				Transform3D local_t = p_original_local;
-				local_t.basis.set_euler_scale(p_original_local.basis.get_rotation_euler(), local_scale);
+				Transform3D local_t;
+				local_t.basis = p_original_local.basis.scaled_local(local_motion + Vector3(1, 1, 1));
+				local_t.origin = p_original_local.origin;
 				return local_t;
 			} else {
 				Transform3D base = Transform3D(Basis(), _edit.center);
@@ -1124,9 +1123,9 @@ Transform3D Node3DEditorViewport::_compute_transform(TransformMode p_mode, const
 					p_motion.snap(Vector3(p_extra, p_extra, p_extra));
 				}
 
-				Transform3D r;
-				r.basis.scale(p_motion + Vector3(1, 1, 1));
-				return base * (r * (base.inverse() * p_original));
+				Transform3D global_t;
+				global_t.basis.scale(p_motion + Vector3(1, 1, 1));
+				return base * (global_t * (base.inverse() * p_original));
 			}
 		}
 		case TRANSFORM_TRANSLATE: {
@@ -1152,19 +1151,18 @@ Transform3D Node3DEditorViewport::_compute_transform(TransformMode p_mode, const
 		}
 		case TRANSFORM_ROTATE: {
 			if (p_local) {
-				Basis rot = Basis(p_motion, p_extra);
-
-				Vector3 scale = p_original_local.basis.get_scale();
-				Vector3 euler = (p_original_local.get_basis().orthonormalized() * rot).get_euler();
-				Transform3D t;
-				t.basis.set_euler_scale(euler, scale);
-				t.origin = p_original_local.origin;
-				return t;
+				Transform3D r;
+				Vector3 axis = p_original_local.basis.xform(p_motion);
+				r.basis = Basis(axis.normalized(), p_extra) * p_original_local.basis;
+				r.origin = p_original_local.origin;
+				return r;
 			} else {
 				Transform3D r;
-				r.basis.rotate(p_motion, p_extra);
-				Transform3D base = Transform3D(Basis(), _edit.center);
-				return base * r * base.inverse() * p_original;
+				Basis local = p_original.basis * p_original_local.basis.inverse();
+				Vector3 axis = local.xform_inv(p_motion);
+				r.basis = local * Basis(axis.normalized(), p_extra) * p_original_local.basis;
+				r.origin = Basis(p_motion, p_extra).xform(p_original.origin - _edit.center) + _edit.center;
+				return r;
 			}
 		}
 		default: {
@@ -1293,7 +1291,7 @@ void Node3DEditorViewport::_sinput(const Ref<InputEvent> &p_event) {
 	if (b.is_valid()) {
 		emit_signal(SNAME("clicked"), this);
 
-		float zoom_factor = 1 + (ZOOM_FREELOOK_MULTIPLIER - 1) * b->get_factor();
+		const real_t zoom_factor = 1 + (ZOOM_FREELOOK_MULTIPLIER - 1) * b->get_factor();
 		switch (b->get_button_index()) {
 			case MOUSE_BUTTON_WHEEL_UP: {
 				if (is_freelook_active()) {
@@ -1596,8 +1594,14 @@ void Node3DEditorViewport::_sinput(const Ref<InputEvent> &p_event) {
 							se->gizmo->commit_subgizmos(ids, restore, false);
 							spatial_editor->update_transform_gizmo();
 						} else {
-							static const char *_transform_name[4] = { "None", "Rotate", "Translate", "Scale" };
-							undo_redo->create_action(_transform_name[_edit.mode]);
+							static const char *_transform_name[4] = {
+								TTRC("None"),
+								TTRC("Rotate"),
+								// TRANSLATORS: This refers to the movement that changes the position of an object.
+								TTRC("Translate"),
+								TTRC("Scale"),
+							};
+							undo_redo->create_action(TTRGET(_transform_name[_edit.mode]));
 
 							List<Node *> &selection = editor_selection->get_selected_node_list();
 
@@ -1774,13 +1778,13 @@ void Node3DEditorViewport::_sinput(const Ref<InputEvent> &p_event) {
 							}
 
 						} else {
-							float center_click_dist = click.distance_to(_edit.center);
-							float center_inters_dist = intersection.distance_to(_edit.center);
+							const real_t center_click_dist = click.distance_to(_edit.center);
+							const real_t center_inters_dist = intersection.distance_to(_edit.center);
 							if (center_click_dist == 0) {
 								break;
 							}
 
-							float scale = center_inters_dist - center_click_dist;
+							const real_t scale = center_inters_dist - center_click_dist;
 							motion = Vector3(scale, scale, scale);
 						}
 
@@ -2451,7 +2455,7 @@ static bool is_shortcut_pressed(const String &p_path) {
 	if (shortcut.is_null()) {
 		return false;
 	}
-	InputEventKey *k = Object::cast_to<InputEventKey>(shortcut->get_shortcut().ptr());
+	InputEventKey *k = Object::cast_to<InputEventKey>(shortcut->get_event().ptr());
 	if (k == nullptr) {
 		return false;
 	}
@@ -3521,18 +3525,15 @@ void Node3DEditorViewport::update_transform_gizmo_view() {
 		return;
 	}
 
-	Vector3 camz = -camera_xform.get_basis().get_axis(2).normalized();
-	Vector3 camy = -camera_xform.get_basis().get_axis(1).normalized();
-	Plane p(camera_xform.origin, camz);
-	float gizmo_d = MAX(Math::abs(p.distance_to(xform.origin)), CMP_EPSILON);
-	float d0 = camera->unproject_position(camera_xform.origin + camz * gizmo_d).y;
-	float d1 = camera->unproject_position(camera_xform.origin + camz * gizmo_d + camy).y;
-	float dd = Math::abs(d0 - d1);
-	if (dd == 0) {
-		dd = 0.0001;
-	}
+	const Vector3 camz = -camera_xform.get_basis().get_axis(2).normalized();
+	const Vector3 camy = -camera_xform.get_basis().get_axis(1).normalized();
+	const Plane p(camera_xform.origin, camz);
+	const real_t gizmo_d = MAX(Math::abs(p.distance_to(xform.origin)), CMP_EPSILON);
+	const real_t d0 = camera->unproject_position(camera_xform.origin + camz * gizmo_d).y;
+	const real_t d1 = camera->unproject_position(camera_xform.origin + camz * gizmo_d + camy).y;
+	const real_t dd = MAX(Math::abs(d0 - d1), CMP_EPSILON);
 
-	float gizmo_size = EditorSettings::get_singleton()->get("editors/3d/manipulator_gizmo_size");
+	const real_t gizmo_size = EditorSettings::get_singleton()->get("editors/3d/manipulator_gizmo_size");
 	// At low viewport heights, multiply the gizmo scale based on the viewport height.
 	// This prevents the gizmo from growing very large and going outside the viewport.
 	const int viewport_base_height = 400 * MAX(1, EDSCALE);
@@ -3788,7 +3789,7 @@ void Node3DEditorViewport::focus_selection() {
 	}
 
 	if (count != 0) {
-		center /= float(count);
+		center /= count;
 	}
 
 	cursor.pos = center;
@@ -4452,14 +4453,14 @@ void Node3DEditorViewportContainer::_gui_input(const Ref<InputEvent> &p_event) {
 		}
 
 		if (dragging_h) {
-			float new_ratio = drag_begin_ratio.x + (mm->get_position().x - drag_begin_pos.x) / get_size().width;
+			real_t new_ratio = drag_begin_ratio.x + (mm->get_position().x - drag_begin_pos.x) / get_size().width;
 			new_ratio = CLAMP(new_ratio, 40 / get_size().width, (get_size().width - 40) / get_size().width);
 			ratio_h = new_ratio;
 			queue_sort();
 			update();
 		}
 		if (dragging_v) {
-			float new_ratio = drag_begin_ratio.y + (mm->get_position().y - drag_begin_pos.y) / get_size().height;
+			real_t new_ratio = drag_begin_ratio.y + (mm->get_position().y - drag_begin_pos.y) / get_size().height;
 			new_ratio = CLAMP(new_ratio, 40 / get_size().height, (get_size().height - 40) / get_size().height);
 			ratio_v = new_ratio;
 			queue_sort();
@@ -5010,13 +5011,13 @@ void Node3DEditor::set_state(const Dictionary &p_state) {
 	}
 
 	if (d.has("zfar")) {
-		settings_zfar->set_value(float(d["zfar"]));
+		settings_zfar->set_value(double(d["zfar"]));
 	}
 	if (d.has("znear")) {
-		settings_znear->set_value(float(d["znear"]));
+		settings_znear->set_value(double(d["znear"]));
 	}
 	if (d.has("fov")) {
-		settings_fov->set_value(float(d["fov"]));
+		settings_fov->set_value(double(d["fov"]));
 	}
 	if (d.has("show_grid")) {
 		bool use = d["show_grid"];
@@ -7198,7 +7199,9 @@ Node3DEditor::Node3DEditor(EditorNode *p_editor) {
 	hbc_menu->add_child(context_menu_container);
 	_update_context_menu_stylebox();
 
+	// Get the view menu popup and have it stay open when a checkable item is selected
 	p = view_menu->get_popup();
+	p->set_hide_on_checkable_item_selection(false);
 
 	accept = memnew(AcceptDialog);
 	editor->get_gui_base()->add_child(accept);
@@ -7617,8 +7620,8 @@ Vector3 Node3DEditor::snap_point(Vector3 p_target, Vector3 p_start) const {
 	return p_target;
 }
 
-float Node3DEditor::get_translate_snap() const {
-	float snap_value;
+double Node3DEditor::get_translate_snap() const {
+	double snap_value;
 	if (Input::get_singleton()->is_key_pressed(KEY_SHIFT)) {
 		snap_value = snap_translate->get_text().to_float() / 10.0;
 	} else {
@@ -7628,8 +7631,8 @@ float Node3DEditor::get_translate_snap() const {
 	return snap_value;
 }
 
-float Node3DEditor::get_rotate_snap() const {
-	float snap_value;
+double Node3DEditor::get_rotate_snap() const {
+	double snap_value;
 	if (Input::get_singleton()->is_key_pressed(KEY_SHIFT)) {
 		snap_value = snap_rotate->get_text().to_float() / 3.0;
 	} else {
@@ -7639,8 +7642,8 @@ float Node3DEditor::get_rotate_snap() const {
 	return snap_value;
 }
 
-float Node3DEditor::get_scale_snap() const {
-	float snap_value;
+double Node3DEditor::get_scale_snap() const {
+	double snap_value;
 	if (Input::get_singleton()->is_key_pressed(KEY_SHIFT)) {
 		snap_value = snap_scale->get_text().to_float() / 2.0;
 	} else {
