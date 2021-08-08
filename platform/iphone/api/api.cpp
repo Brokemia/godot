@@ -1,5 +1,5 @@
 /*************************************************************************/
-/*  csg_gizmos.h                                                         */
+/*  api.cpp                                                              */
 /*************************************************************************/
 /*                       This file is part of:                           */
 /*                           GODOT ENGINE                                */
@@ -28,36 +28,21 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
 /*************************************************************************/
 
-#ifndef CSG_GIZMOS_H
-#define CSG_GIZMOS_H
+#include "api.h"
 
-#include "csg_shape.h"
-#include "editor/editor_plugin.h"
-#include "editor/plugins/node_3d_editor_gizmos.h"
+#if defined(IPHONE_ENABLED)
 
-class CSGShape3DGizmoPlugin : public EditorNode3DGizmoPlugin {
-	GDCLASS(CSGShape3DGizmoPlugin, EditorNode3DGizmoPlugin);
+void register_iphone_api() {
+	godot_ios_plugins_initialize();
+}
 
-public:
-	virtual bool has_gizmo(Node3D *p_spatial) override;
-	virtual String get_gizmo_name() const override;
-	virtual int get_priority() const override;
-	virtual bool is_selectable_when_hidden() const override;
-	virtual void redraw(EditorNode3DGizmo *p_gizmo) override;
+void unregister_iphone_api() {
+	godot_ios_plugins_deinitialize();
+}
 
-	virtual String get_handle_name(const EditorNode3DGizmo *p_gizmo, int p_id) const override;
-	virtual Variant get_handle_value(const EditorNode3DGizmo *p_gizmo, int p_id) const override;
-	virtual void set_handle(const EditorNode3DGizmo *p_gizmo, int p_id, Camera3D *p_camera, const Point2 &p_point) override;
-	virtual void commit_handle(const EditorNode3DGizmo *p_gizmo, int p_id, const Variant &p_restore, bool p_cancel) override;
+#else
 
-	CSGShape3DGizmoPlugin();
-};
+void register_iphone_api() {}
+void unregister_iphone_api() {}
 
-class EditorPluginCSG : public EditorPlugin {
-	GDCLASS(EditorPluginCSG, EditorPlugin);
-
-public:
-	EditorPluginCSG(EditorNode *p_editor);
-};
-
-#endif // CSG_GIZMOS_H
+#endif
