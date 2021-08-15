@@ -374,6 +374,11 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
 	_initial_set("interface/editor/display_scale", 0);
 	// Display what the Auto display scale setting effectively corresponds to.
 	float scale = get_auto_display_scale();
+
+	_initial_set("interface/editor/enable_debugging_pseudolocalization", false);
+	set_restart_if_changed("interface/editor/enable_debugging_pseudolocalization", true);
+	// Use pseudolocalization in editor.
+
 	hints["interface/editor/display_scale"] = PropertyInfo(Variant::INT, "interface/editor/display_scale", PROPERTY_HINT_ENUM, vformat("Auto (%d%%),75%%,100%%,125%%,150%%,175%%,200%%,Custom", Math::round(scale * 100)), PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_RESTART_IF_CHANGED);
 	_initial_set("interface/editor/custom_display_scale", 1.0f);
 	hints["interface/editor/custom_display_scale"] = PropertyInfo(Variant::FLOAT, "interface/editor/custom_display_scale", PROPERTY_HINT_RANGE, "0.5,3,0.01", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_RESTART_IF_CHANGED);
@@ -520,7 +525,9 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
 	_initial_set("text_editor/appearance/show_bookmark_gutter", true);
 	_initial_set("text_editor/appearance/show_info_gutter", true);
 	_initial_set("text_editor/appearance/code_folding", true);
-	_initial_set("text_editor/appearance/word_wrap", false);
+	_initial_set("text_editor/appearance/word_wrap", 0);
+	hints["text_editor/appearance/word_wrap"] = PropertyInfo(Variant::INT, "text_editor/appearance/word_wrap", PROPERTY_HINT_ENUM, "None,Boundary");
+
 	_initial_set("text_editor/appearance/show_line_length_guidelines", true);
 	_initial_set("text_editor/appearance/line_length_guideline_soft_column", 80);
 	hints["text_editor/appearance/line_length_guideline_soft_column"] = PropertyInfo(Variant::INT, "text_editor/appearance/line_length_guideline_soft_column", PROPERTY_HINT_RANGE, "20, 160, 1");
@@ -541,7 +548,8 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
 
 	// Cursor
 	_initial_set("text_editor/cursor/scroll_past_end_of_file", false);
-	_initial_set("text_editor/cursor/block_caret", false);
+	_initial_set("text_editor/cursor/type", 0);
+	hints["text_editor/cursor/type"] = PropertyInfo(Variant::INT, "text_editor/cursor/type", PROPERTY_HINT_ENUM, "Line,Block");
 	_initial_set("text_editor/cursor/caret_blink", true);
 	_initial_set("text_editor/cursor/caret_blink_speed", 0.5);
 	hints["text_editor/cursor/caret_blink_speed"] = PropertyInfo(Variant::FLOAT, "text_editor/cursor/caret_blink_speed", PROPERTY_HINT_RANGE, "0.1, 10, 0.01");
@@ -953,11 +961,11 @@ fail:
 }
 
 void EditorSettings::setup_language() {
+	TranslationServer::get_singleton()->set_editor_pseudolocalization(get("interface/editor/enable_debugging_pseudolocalization"));
 	String lang = get("interface/editor/editor_language");
 	if (lang == "en") {
 		return; // Default, nothing to do.
 	}
-
 	// Load editor translation for configured/detected locale.
 	EditorTranslationList *etl = _editor_translations;
 	while (etl->data) {
@@ -1514,7 +1522,7 @@ Ref<Shortcut> ED_GET_SHORTCUT(const String &p_path) {
 	return sc;
 }
 
-Ref<Shortcut> ED_SHORTCUT(const String &p_path, const String &p_name, uint32_t p_keycode) {
+Ref<Shortcut> ED_SHORTCUT(const String &p_path, const String &p_name, Key p_keycode) {
 #ifdef OSX_ENABLED
 	// Use Cmd+Backspace as a general replacement for Delete shortcuts on macOS
 	if (p_keycode == KEY_DELETE) {
