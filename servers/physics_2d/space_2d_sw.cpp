@@ -709,7 +709,7 @@ int Space2DSW::test_body_ray_separation(Body2DSW *p_body, const Transform2D &p_t
 	return rays_found;
 }
 
-bool Space2DSW::test_body_motion(Body2DSW *p_body, const Transform2D &p_from, const Vector2 &p_motion, bool p_infinite_inertia, real_t p_margin, PhysicsServer2D::MotionResult *r_result, bool p_exclude_raycast_shapes, const Set<RID> &p_exclude) {
+bool Space2DSW::test_body_motion(Body2DSW *p_body, const Transform2D &p_from, const Vector2 &p_motion, real_t p_margin, PhysicsServer2D::MotionResult *r_result, const Set<RID> &p_exclude) {
 	//give me back regular physics engine logic
 	//this is madness
 	//and most people using this function will think
@@ -727,10 +727,6 @@ bool Space2DSW::test_body_motion(Body2DSW *p_body, const Transform2D &p_from, co
 
 	for (int i = 0; i < p_body->get_shape_count(); i++) {
 		if (p_body->is_shape_disabled(i)) {
-			continue;
-		}
-
-		if (p_exclude_raycast_shapes && p_body->get_shape(i)->get_type() == PhysicsServer2D::SHAPE_RAY) {
 			continue;
 		}
 
@@ -794,24 +790,15 @@ bool Space2DSW::test_body_motion(Body2DSW *p_body, const Transform2D &p_from, co
 				}
 
 				Shape2DSW *body_shape = p_body->get_shape(j);
-				if (p_exclude_raycast_shapes && body_shape->get_type() == PhysicsServer2D::SHAPE_RAY) {
-					continue;
-				}
-
 				Transform2D body_shape_xform = body_transform * p_body->get_shape_transform(j);
+
 				for (int i = 0; i < amount; i++) {
 					const CollisionObject2DSW *col_obj = intersection_query_results[i];
 					if (p_exclude.has(col_obj->get_self())) {
 						continue;
 					}
-					int shape_idx = intersection_query_subindex_results[i];
 
-					if (CollisionObject2DSW::TYPE_BODY == col_obj->get_type()) {
-						const Body2DSW *b = static_cast<const Body2DSW *>(col_obj);
-						if (p_infinite_inertia && PhysicsServer2D::BODY_MODE_STATIC != b->get_mode() && PhysicsServer2D::BODY_MODE_KINEMATIC != b->get_mode()) {
-							continue;
-						}
-					}
+					int shape_idx = intersection_query_subindex_results[i];
 
 					Transform2D col_obj_shape_xform = col_obj->get_transform() * col_obj->get_shape_transform(shape_idx);
 
@@ -920,10 +907,6 @@ bool Space2DSW::test_body_motion(Body2DSW *p_body, const Transform2D &p_from, co
 			}
 
 			Shape2DSW *body_shape = p_body->get_shape(body_shape_idx);
-			if (p_exclude_raycast_shapes && body_shape->get_type() == PhysicsServer2D::SHAPE_RAY) {
-				continue;
-			}
-
 			Transform2D body_shape_xform = body_transform * p_body->get_shape_transform(body_shape_idx);
 
 			bool stuck = false;
@@ -938,13 +921,6 @@ bool Space2DSW::test_body_motion(Body2DSW *p_body, const Transform2D &p_from, co
 				}
 				int col_shape_idx = intersection_query_subindex_results[i];
 				Shape2DSW *against_shape = col_obj->get_shape(col_shape_idx);
-
-				if (CollisionObject2DSW::TYPE_BODY == col_obj->get_type()) {
-					const Body2DSW *b = static_cast<const Body2DSW *>(col_obj);
-					if (p_infinite_inertia && PhysicsServer2D::BODY_MODE_STATIC != b->get_mode() && PhysicsServer2D::BODY_MODE_KINEMATIC != b->get_mode()) {
-						continue;
-					}
-				}
 
 				bool excluded = false;
 
@@ -1082,10 +1058,6 @@ bool Space2DSW::test_body_motion(Body2DSW *p_body, const Transform2D &p_from, co
 			Transform2D body_shape_xform = ugt * p_body->get_shape_transform(j);
 			Shape2DSW *body_shape = p_body->get_shape(j);
 
-			if (p_exclude_raycast_shapes && body_shape->get_type() == PhysicsServer2D::SHAPE_RAY) {
-				continue;
-			}
-
 			body_aabb.position += p_motion * unsafe;
 
 			int amount = _cull_aabb_for_body(p_body, body_aabb);
@@ -1095,14 +1067,8 @@ bool Space2DSW::test_body_motion(Body2DSW *p_body, const Transform2D &p_from, co
 				if (p_exclude.has(col_obj->get_self())) {
 					continue;
 				}
-				int shape_idx = intersection_query_subindex_results[i];
 
-				if (CollisionObject2DSW::TYPE_BODY == col_obj->get_type()) {
-					const Body2DSW *b = static_cast<const Body2DSW *>(col_obj);
-					if (p_infinite_inertia && PhysicsServer2D::BODY_MODE_STATIC != b->get_mode() && PhysicsServer2D::BODY_MODE_KINEMATIC != b->get_mode()) {
-						continue;
-					}
-				}
+				int shape_idx = intersection_query_subindex_results[i];
 
 				Shape2DSW *against_shape = col_obj->get_shape(shape_idx);
 
