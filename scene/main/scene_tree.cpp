@@ -510,7 +510,7 @@ bool SceneTree::process(double p_time) {
 			cpath = fallback->get_path();
 		}
 		if (cpath != env_path) {
-			if (env_path != String()) {
+			if (!env_path.is_empty()) {
 				fallback = ResourceLoader::load(env_path);
 				if (fallback.is_null()) {
 					//could not load fallback, set as empty
@@ -544,7 +544,7 @@ void SceneTree::process_tweens(float p_delta, bool p_physics) {
 		}
 
 		if (!E->get()->step(p_delta)) {
-			E->get()->set_valid(false);
+			E->get()->clear();
 			tweens.erase(E);
 		}
 		if (E == L) {
@@ -570,7 +570,11 @@ void SceneTree::finalize() {
 		root = nullptr;
 	}
 
-	// cleanup timers
+	// In case deletion of some objects was queued when destructing the `root`.
+	// E.g. if `queue_free()` was called for some node outside the tree when handling NOTIFICATION_PREDELETE for some node in the tree.
+	_flush_delete_queue();
+
+	// Cleanup timers.
 	for (Ref<SceneTreeTimer> &timer : timers) {
 		timer->release_connections();
 	}
@@ -858,16 +862,7 @@ void SceneTree::_notify_group_pause(const StringName &p_group, int p_notificatio
 	}
 }
 
-/*
-void SceneMainLoop::_update_listener_2d() {
-	if (listener_2d.is_valid()) {
-		SpatialSound2DServer::get_singleton()->listener_set_space( listener_2d, world_2d->get_sound_space() );
-	}
-}
-
-*/
-
-void SceneTree::_call_input_pause(const StringName &p_group, const StringName &p_method, const Ref<InputEvent> &p_input, Viewport *p_viewport) {
+void SceneTree::_call_input_pause(const StringName &p_group, CallInputType p_call_type, const Ref<InputEvent> &p_input, Viewport *p_viewport) {
 	Map<StringName, Group>::Element *E = group_map.find(p_group);
 	if (!E) {
 		return;
@@ -886,9 +881,6 @@ void SceneTree::_call_input_pause(const StringName &p_group, const StringName &p
 	int node_count = nodes_copy.size();
 	Node **nodes = nodes_copy.ptrw();
 
-	Variant arg = p_input;
-	const Variant *v[1] = { &arg };
-
 	call_lock++;
 
 	for (int i = node_count - 1; i >= 0; i--) {
@@ -905,14 +897,16 @@ void SceneTree::_call_input_pause(const StringName &p_group, const StringName &p
 			continue;
 		}
 
-		Callable::CallError err;
-		// Call both script and native method.
-		if (n->get_script_instance()) {
-			n->get_script_instance()->call(p_method, (const Variant **)v, 1, err);
-		}
-		MethodBind *method = ClassDB::get_method(n->get_class_name(), p_method);
-		if (method) {
-			method->call(n, (const Variant **)v, 1, err);
+		switch (p_call_type) {
+			case CALL_INPUT_TYPE_INPUT:
+				n->_call_input(p_input);
+				break;
+			case CALL_INPUT_TYPE_UNHANDLED_INPUT:
+				n->_call_unhandled_input(p_input);
+				break;
+			case CALL_INPUT_TYPE_UNHANDLED_KEY_INPUT:
+				n->_call_unhandled_key_input(p_input);
+				break;
 		}
 	}
 
@@ -1115,7 +1109,7 @@ Error SceneTree::change_scene_to(const Ref<PackedScene> &p_scene) {
 
 Error SceneTree::reload_current_scene() {
 	ERR_FAIL_COND_V(!current_scene, ERR_UNCONFIGURED);
-	String fname = current_scene->get_filename();
+	String fname = current_scene->get_scene_file_path();
 	return change_scene(fname);
 }
 
@@ -1296,7 +1290,7 @@ void SceneTree::get_argument_options(const StringName &p_function, int p_idx, Li
 			dir_access->list_dir_begin();
 			String filename = dir_access->get_next();
 
-			while (filename != "") {
+			while (!filename.is_empty()) {
 				if (filename == "." || filename == "..") {
 					filename = dir_access->get_next();
 					continue;
@@ -1332,6 +1326,7 @@ SceneTree::SceneTree() {
 	// Create with mainloop.
 
 	root = memnew(Window);
+	root->set_process_mode(Node::PROCESS_MODE_PAUSABLE);
 	root->set_name("root");
 #ifndef _3D_DISABLED
 	if (!root->get_world_3d().is_valid()) {
@@ -1347,7 +1342,7 @@ SceneTree::SceneTree() {
 	current_scene = nullptr;
 
 	const int msaa_mode = GLOBAL_DEF("rendering/anti_aliasing/quality/msaa", 0);
-	ProjectSettings::get_singleton()->set_custom_property_info("rendering/anti_aliasing/quality/msaa", PropertyInfo(Variant::INT, "rendering/anti_aliasing/quality/msaa", PROPERTY_HINT_ENUM, String::utf8("Disabled (Fastest),2× (Fast),4× (Average),8× (Slow),16× (Slower)")));
+	ProjectSettings::get_singleton()->set_custom_property_info("rendering/anti_aliasing/quality/msaa", PropertyInfo(Variant::INT, "rendering/anti_aliasing/quality/msaa", PROPERTY_HINT_ENUM, String::utf8("Disabled (Fastest),2× (Average),4× (Slow),8× (Slowest)")));
 	root->set_msaa(Viewport::MSAA(msaa_mode));
 
 	const int ssaa_mode = GLOBAL_DEF("rendering/anti_aliasing/quality/screen_space_aa", 0);
@@ -1405,7 +1400,7 @@ SceneTree::SceneTree() {
 		ResourceLoader::get_recognized_extensions_for_type("Environment", &exts);
 		String ext_hint;
 		for (const String &E : exts) {
-			if (ext_hint != String()) {
+			if (!ext_hint.is_empty()) {
 				ext_hint += ",";
 			}
 			ext_hint += "*." + E;
@@ -1415,7 +1410,7 @@ SceneTree::SceneTree() {
 		// Setup property.
 		ProjectSettings::get_singleton()->set_custom_property_info("rendering/environment/defaults/default_environment", PropertyInfo(Variant::STRING, "rendering/viewport/default_environment", PROPERTY_HINT_FILE, ext_hint));
 		env_path = env_path.strip_edges();
-		if (env_path != String()) {
+		if (!env_path.is_empty()) {
 			Ref<Environment> env = ResourceLoader::load(env_path);
 			if (env.is_valid()) {
 				root->get_world_3d()->set_fallback_environment(env);

@@ -39,13 +39,6 @@ class RichTextLabel : public Control {
 	GDCLASS(RichTextLabel, Control);
 
 public:
-	enum Align {
-		ALIGN_LEFT,
-		ALIGN_CENTER,
-		ALIGN_RIGHT,
-		ALIGN_FILL
-	};
-
 	enum ListType {
 		LIST_NUMBERS,
 		LIST_LETTERS,
@@ -85,7 +78,6 @@ public:
 protected:
 	void _notification(int p_what);
 	static void _bind_methods();
-	void _validate_property(PropertyInfo &property) const override;
 
 private:
 	struct Item;
@@ -161,7 +153,7 @@ private:
 
 	struct ItemImage : public Item {
 		Ref<Texture2D> image;
-		InlineAlign inline_align = INLINE_ALIGN_CENTER;
+		InlineAlignment inline_align = INLINE_ALIGNMENT_CENTER;
 		Size2 size;
 		Color color;
 		ItemImage() { type = ITEM_IMAGE; }
@@ -211,7 +203,7 @@ private:
 	};
 
 	struct ItemParagraph : public Item {
-		Align align = ALIGN_LEFT;
+		HorizontalAlignment alignment = HORIZONTAL_ALIGNMENT_LEFT;
 		String language;
 		Control::TextDirection direction = Control::TEXT_DIRECTION_AUTO;
 		Control::StructuredTextParser st_parser = STRUCTURED_TEXT_DEFAULT;
@@ -248,7 +240,7 @@ private:
 
 		int total_width = 0;
 		int total_height = 0;
-		InlineAlign inline_align = INLINE_ALIGN_TOP;
+		InlineAlignment inline_align = INLINE_ALIGNMENT_TOP;
 		ItemTable() { type = ITEM_TABLE; }
 	};
 
@@ -268,6 +260,7 @@ private:
 		float rate = 0.0f;
 		uint64_t _current_rng = 0;
 		uint64_t _previous_rng = 0;
+		Vector2 prev_off;
 
 		ItemShake() { type = ITEM_SHAKE; }
 
@@ -278,18 +271,19 @@ private:
 
 		uint64_t offset_random(int index) {
 			return (_current_rng >> (index % 64)) |
-				   (_current_rng << (64 - (index % 64)));
+					(_current_rng << (64 - (index % 64)));
 		}
 
 		uint64_t offset_previous_random(int index) {
 			return (_previous_rng >> (index % 64)) |
-				   (_previous_rng << (64 - (index % 64)));
+					(_previous_rng << (64 - (index % 64)));
 		}
 	};
 
 	struct ItemWave : public ItemFX {
 		float frequency = 1.0f;
 		float amplitude = 1.0f;
+		Vector2 prev_off;
 
 		ItemWave() { type = ITEM_WAVE; }
 	};
@@ -297,6 +291,7 @@ private:
 	struct ItemTornado : public ItemFX {
 		float radius = 1.0f;
 		float frequency = 1.0f;
+		Vector2 prev_off;
 
 		ItemTornado() { type = ITEM_TORNADO; }
 	};
@@ -358,12 +353,12 @@ private:
 	bool underline_meta = true;
 	bool override_selected_font_color = false;
 
-	Align default_align = ALIGN_LEFT;
+	HorizontalAlignment default_alignment = HORIZONTAL_ALIGNMENT_LEFT;
 
 	ItemMeta *meta_hovering = nullptr;
 	Variant current_meta;
 
-	Vector<Ref<RichTextEffect>> custom_effects;
+	Array custom_effects;
 
 	void _invalidate_current_line(ItemFrame *p_frame);
 	void _validate_line_caches(ItemFrame *p_frame);
@@ -397,6 +392,7 @@ private:
 	};
 
 	Selection selection;
+	bool deselect_on_focus_loss_enabled = true;
 
 	int visible_characters = -1;
 	float percent_visible = 1.0;
@@ -409,7 +405,7 @@ private:
 
 	void _shape_line(ItemFrame *p_frame, int p_line, const Ref<Font> &p_base_font, int p_base_font_size, int p_width, int *r_char_offset);
 	void _resize_line(ItemFrame *p_frame, int p_line, const Ref<Font> &p_base_font, int p_base_font_size, int p_width);
-	int _draw_line(ItemFrame *p_frame, int p_line, const Vector2 &p_ofs, int p_width, const Color &p_base_color, int p_outline_size, const Color &p_outline_color, const Color &p_font_shadow_color, bool p_shadow_as_outline, const Point2 &shadow_ofs);
+	int _draw_line(ItemFrame *p_frame, int p_line, const Vector2 &p_ofs, int p_width, const Color &p_base_color, int p_outline_size, const Color &p_outline_color, const Color &p_font_shadow_color, int p_shadow_outline_size, const Point2 &p_shadow_ofs);
 	float _find_click_in_line(ItemFrame *p_frame, int p_line, const Vector2 &p_ofs, int p_width, const Point2i &p_click, ItemFrame **r_click_frame = nullptr, int *r_click_line = nullptr, Item **r_click_item = nullptr, int *r_click_char = nullptr);
 
 	String _roman(int p_num, bool p_capitalize) const;
@@ -425,7 +421,7 @@ private:
 	ItemDropcap *_find_dc_item(Item *p_item);
 	int _find_list(Item *p_item, Vector<int> &r_index, Vector<ItemList *> &r_list);
 	int _find_margin(Item *p_item, const Ref<Font> &p_base_font, int p_base_font_size);
-	Align _find_align(Item *p_item);
+	HorizontalAlignment _find_alignment(Item *p_item);
 	TextServer::Direction _find_direction(Item *p_item);
 	Control::StructuredTextParser _find_stt(Item *p_item);
 	String _find_language(Item *p_item);
@@ -443,7 +439,7 @@ private:
 	void _update_fx(ItemFrame *p_frame, double p_delta_time);
 	void _scroll_changed(double);
 
-	void _gui_input(Ref<InputEvent> p_event);
+	virtual void gui_input(const Ref<InputEvent> &p_event) override;
 	Item *_get_next_item(Item *p_item, bool p_free = false) const;
 	Item *_get_prev_item(Item *p_item, bool p_free = false) const;
 
@@ -452,18 +448,21 @@ private:
 	virtual Dictionary parse_expressions_for_values(Vector<String> p_expressions);
 
 	void _draw_fbg_boxes(RID p_ci, RID p_rid, Vector2 line_off, Item *it_from, Item *it_to, int start, int end, int fbg_flag);
-
+#ifndef DISABLE_DEPRECATED
+	// Kept for compatibility from 3.x to 4.0.
+	bool _set(const StringName &p_name, const Variant &p_value);
+#endif
 	bool use_bbcode = false;
-	String bbcode;
+	String text;
 
 	int fixed_width = -1;
 
 	bool fit_content_height = false;
 
 public:
-	String get_text();
+	String get_parsed_text() const;
 	void add_text(const String &p_text);
-	void add_image(const Ref<Texture2D> &p_image, const int p_width = 0, const int p_height = 0, const Color &p_color = Color(1.0, 1.0, 1.0), InlineAlign p_align = INLINE_ALIGN_CENTER);
+	void add_image(const Ref<Texture2D> &p_image, const int p_width = 0, const int p_height = 0, const Color &p_color = Color(1.0, 1.0, 1.0), InlineAlignment p_alignment = INLINE_ALIGNMENT_CENTER);
 	void add_newline();
 	bool remove_line(const int p_line);
 	void push_dropcap(const String &p_string, const Ref<Font> &p_font, int p_size, const Rect2 &p_dropcap_margins = Rect2(), const Color &p_color = Color(1, 1, 1), int p_ol_size = 0, const Color &p_ol_color = Color(0, 0, 0, 0));
@@ -480,11 +479,11 @@ public:
 	void push_outline_color(const Color &p_color);
 	void push_underline();
 	void push_strikethrough();
-	void push_paragraph(Align p_align, Control::TextDirection p_direction = Control::TEXT_DIRECTION_INHERITED, const String &p_language = "", Control::StructuredTextParser p_st_parser = STRUCTURED_TEXT_DEFAULT);
+	void push_paragraph(HorizontalAlignment p_alignment, Control::TextDirection p_direction = Control::TEXT_DIRECTION_INHERITED, const String &p_language = "", Control::StructuredTextParser p_st_parser = STRUCTURED_TEXT_DEFAULT);
 	void push_indent(int p_level);
 	void push_list(int p_level, ListType p_list, bool p_capitalize);
 	void push_meta(const Variant &p_meta);
-	void push_table(int p_columns, InlineAlign p_align = INLINE_ALIGN_TOP);
+	void push_table(int p_columns, InlineAlignment p_alignment = INLINE_ALIGNMENT_TOP);
 	void push_fade(int p_start_index, int p_length);
 	void push_shake(int p_strength, float p_rate);
 	void push_wave(float p_frequency, float p_amplitude);
@@ -546,17 +545,17 @@ public:
 	int get_selection_to() const;
 	String get_selected_text() const;
 	void selection_copy();
+	void set_deselect_on_focus_loss_enabled(const bool p_enabled);
+	bool is_deselect_on_focus_loss_enabled() const;
 
-	Error parse_bbcode(const String &p_bbcode);
-	Error append_bbcode(const String &p_bbcode);
+	void parse_bbcode(const String &p_bbcode);
+	void append_text(const String &p_bbcode);
 
 	void set_use_bbcode(bool p_enable);
 	bool is_using_bbcode() const;
 
-	void set_bbcode(const String &p_bbcode);
-	String get_bbcode() const;
-
-	void set_text(const String &p_string);
+	void set_text(const String &p_bbcode);
+	String get_text() const;
 
 	void set_text_direction(TextDirection p_text_direction);
 	TextDirection get_text_direction() const;
@@ -577,8 +576,8 @@ public:
 	void set_percent_visible(float p_percent);
 	float get_percent_visible() const;
 
-	void set_effects(const Vector<Variant> &effects);
-	Vector<Variant> get_effects();
+	void set_effects(Array p_effects);
+	Array get_effects();
 
 	void install_effect(const Variant effect);
 
@@ -589,7 +588,6 @@ public:
 	~RichTextLabel();
 };
 
-VARIANT_ENUM_CAST(RichTextLabel::Align);
 VARIANT_ENUM_CAST(RichTextLabel::ListType);
 VARIANT_ENUM_CAST(RichTextLabel::ItemType);
 

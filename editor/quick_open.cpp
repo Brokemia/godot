@@ -55,16 +55,23 @@ void EditorQuickOpen::_build_search_cache(EditorFileSystemDirectory *p_efsd) {
 		_build_search_cache(p_efsd->get_subdir(i));
 	}
 
+	Vector<String> base_types = String(base_type).split(String(","));
 	for (int i = 0; i < p_efsd->get_file_count(); i++) {
 		String file_type = p_efsd->get_file_type(i);
-		if (ClassDB::is_parent_class(file_type, base_type)) {
-			String file = p_efsd->get_file_path(i);
-			files.push_back(file.substr(6, file.length()));
+		// Iterate all possible base types.
+		for (String &parent_type : base_types) {
+			if (ClassDB::is_parent_class(file_type, parent_type)) {
+				String file = p_efsd->get_file_path(i);
+				files.push_back(file.substr(6, file.length()));
 
-			// Store refs to used icons.
-			String ext = file.get_extension();
-			if (!icons.has(ext)) {
-				icons.insert(ext, get_theme_icon((has_theme_icon(file_type, SNAME("EditorIcons")) ? file_type : String("Object")), SNAME("EditorIcons")));
+				// Store refs to used icons.
+				String ext = file.get_extension();
+				if (!icons.has(ext)) {
+					icons.insert(ext, get_theme_icon((has_theme_icon(file_type, SNAME("EditorIcons")) ? file_type : String("Object")), SNAME("EditorIcons")));
+				}
+
+				// Stop testing base types as soon as we got a match.
+				break;
 			}
 		}
 	}
@@ -72,7 +79,7 @@ void EditorQuickOpen::_build_search_cache(EditorFileSystemDirectory *p_efsd) {
 
 void EditorQuickOpen::_update_search() {
 	const String search_text = search_box->get_text();
-	const bool empty_search = search_text == "";
+	const bool empty_search = search_text.is_empty();
 
 	// Filter possible candidates.
 	Vector<Entry> entries;
@@ -130,12 +137,6 @@ float EditorQuickOpen::_score_path(const String &p_search, const String &p_path)
 		return score * (1.0f - 0.1f * (float(pos) / file.length()));
 	}
 
-	// Positive bias for matches close to the end of the path.
-	pos = p_path.rfindn(p_search);
-	if (pos != -1) {
-		return 1.1f + 0.09 / (p_path.length() - pos + 1);
-	}
-
 	// Similarity
 	return p_path.to_lower().similarity(p_search.to_lower());
 }
@@ -166,11 +167,11 @@ void EditorQuickOpen::_sbox_input(const Ref<InputEvent> &p_ie) {
 	Ref<InputEventKey> k = p_ie;
 	if (k.is_valid()) {
 		switch (k->get_keycode()) {
-			case KEY_UP:
-			case KEY_DOWN:
-			case KEY_PAGEUP:
-			case KEY_PAGEDOWN: {
-				search_options->call("_gui_input", k);
+			case Key::UP:
+			case Key::DOWN:
+			case Key::PAGEUP:
+			case Key::PAGEDOWN: {
+				search_options->gui_input(k);
 				search_box->accept_event();
 
 				if (allow_multi_select) {

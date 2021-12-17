@@ -46,10 +46,6 @@
 #include "drivers/xaudio2/audio_driver_xaudio2.h"
 #endif
 
-#if defined(OPENGL_ENABLED)
-#include "context_gl_windows.h"
-#endif
-
 #if defined(VULKAN_ENABLED)
 #include "drivers/vulkan/rendering_device_vulkan.h"
 #include "platform/windows/vulkan_context_win.h"
@@ -57,7 +53,9 @@
 
 #include <fcntl.h>
 #include <io.h>
+#include <shellapi.h>
 #include <stdio.h>
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <windowsx.h>
 
@@ -120,8 +118,8 @@ public:
 
 	virtual void initialize_joypads() override {}
 
-	virtual Date get_date(bool utc) const override;
-	virtual Time get_time(bool utc) const override;
+	virtual Date get_date(bool p_utc) const override;
+	virtual Time get_time(bool p_utc) const override;
 	virtual TimeZoneInfo get_time_zone_info() const override;
 	virtual double get_unix_time() const override;
 
@@ -150,7 +148,7 @@ public:
 	virtual String get_cache_path() const override;
 	virtual String get_godot_dir_name() const override;
 
-	virtual String get_system_dir(SystemDir p_dir) const override;
+	virtual String get_system_dir(SystemDir p_dir, bool p_shared_storage = true) const override;
 	virtual String get_user_data_dir() const override;
 
 	virtual String get_unique_id() const override;
@@ -159,6 +157,7 @@ public:
 
 	void run();
 
+	bool _is_win11_terminal() const;
 	virtual bool _check_internal_feature_support(const String &p_feature) override;
 
 	virtual void disable_crash_handler() override;

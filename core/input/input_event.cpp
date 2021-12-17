@@ -31,8 +31,8 @@
 #include "input_event.h"
 
 #include "core/input/input_map.h"
+#include "core/input/shortcut.h"
 #include "core/os/keyboard.h"
-#include "scene/gui/shortcut.h"
 
 const int InputEvent::DEVICE_ID_TOUCH_MOUSE = -1;
 const int InputEvent::DEVICE_ID_INTERNAL = -2;
@@ -203,19 +203,19 @@ void InputEventWithModifiers::set_modifiers_from_event(const InputEventWithModif
 	set_meta_pressed(event->is_meta_pressed());
 }
 
-uint32_t InputEventWithModifiers::get_modifiers_mask() const {
-	uint32_t mask = 0;
+Key InputEventWithModifiers::get_modifiers_mask() const {
+	Key mask = Key::NONE;
 	if (is_ctrl_pressed()) {
-		mask |= KEY_MASK_CTRL;
+		mask |= KeyModifierMask::CTRL;
 	}
 	if (is_shift_pressed()) {
-		mask |= KEY_MASK_SHIFT;
+		mask |= KeyModifierMask::SHIFT;
 	}
 	if (is_alt_pressed()) {
-		mask |= KEY_MASK_ALT;
+		mask |= KeyModifierMask::ALT;
 	}
 	if (is_meta_pressed()) {
-		mask |= KEY_MASK_META;
+		mask |= KeyModifierMask::META;
 	}
 	return mask;
 }
@@ -224,16 +224,16 @@ String InputEventWithModifiers::as_text() const {
 	Vector<String> mod_names;
 
 	if (is_ctrl_pressed()) {
-		mod_names.push_back(find_keycode_name(KEY_CTRL));
+		mod_names.push_back(find_keycode_name(Key::CTRL));
 	}
 	if (is_shift_pressed()) {
-		mod_names.push_back(find_keycode_name(KEY_SHIFT));
+		mod_names.push_back(find_keycode_name(Key::SHIFT));
 	}
 	if (is_alt_pressed()) {
-		mod_names.push_back(find_keycode_name(KEY_ALT));
+		mod_names.push_back(find_keycode_name(Key::ALT));
 	}
 	if (is_meta_pressed()) {
-		mod_names.push_back(find_keycode_name(KEY_META));
+		mod_names.push_back(find_keycode_name(Key::META));
 	}
 
 	if (!mod_names.is_empty()) {
@@ -325,12 +325,12 @@ Key InputEventKey::get_physical_keycode() const {
 	return physical_keycode;
 }
 
-void InputEventKey::set_unicode(uint32_t p_unicode) {
+void InputEventKey::set_unicode(char32_t p_unicode) {
 	unicode = p_unicode;
 	emit_changed();
 }
 
-uint32_t InputEventKey::get_unicode() const {
+char32_t InputEventKey::get_unicode() const {
 	return unicode;
 }
 
@@ -343,29 +343,29 @@ bool InputEventKey::is_echo() const {
 	return echo;
 }
 
-uint32_t InputEventKey::get_keycode_with_modifiers() const {
+Key InputEventKey::get_keycode_with_modifiers() const {
 	return keycode | get_modifiers_mask();
 }
 
-uint32_t InputEventKey::get_physical_keycode_with_modifiers() const {
+Key InputEventKey::get_physical_keycode_with_modifiers() const {
 	return physical_keycode | get_modifiers_mask();
 }
 
 String InputEventKey::as_text() const {
 	String kc;
 
-	if (keycode == 0) {
+	if (keycode == Key::NONE) {
 		kc = keycode_get_string(physical_keycode) + " (" + RTR("Physical") + ")";
 	} else {
 		kc = keycode_get_string(keycode);
 	}
 
-	if (kc == String()) {
+	if (kc.is_empty()) {
 		return kc;
 	}
 
 	String mods_text = InputEventWithModifiers::as_text();
-	return mods_text == "" ? kc : mods_text + "+" + kc;
+	return mods_text.is_empty() ? kc : mods_text + "+" + kc;
 }
 
 String InputEventKey::to_string() {
@@ -374,15 +374,15 @@ String InputEventKey::to_string() {
 
 	String kc = "";
 	String physical = "false";
-	if (keycode == 0) {
-		kc = itos(physical_keycode) + " (" + keycode_get_string(physical_keycode) + ")";
+	if (keycode == Key::NONE) {
+		kc = itos((int64_t)physical_keycode) + " (" + keycode_get_string(physical_keycode) + ")";
 		physical = "true";
 	} else {
-		kc = itos(keycode) + " (" + keycode_get_string(keycode) + ")";
+		kc = itos((int64_t)keycode) + " (" + keycode_get_string(keycode) + ")";
 	}
 
 	String mods = InputEventWithModifiers::as_text();
-	mods = mods == "" ? TTR("none") : mods;
+	mods = mods.is_empty() ? TTR("none") : mods;
 
 	return vformat("InputEventKey: keycode=%s, mods=%s, physical=%s, pressed=%s, echo=%s", kc, mods, physical, p, e);
 }
@@ -390,22 +390,22 @@ String InputEventKey::to_string() {
 Ref<InputEventKey> InputEventKey::create_reference(Key p_keycode) {
 	Ref<InputEventKey> ie;
 	ie.instantiate();
-	ie->set_keycode(p_keycode & KEY_CODE_MASK);
-	ie->set_unicode(p_keycode & KEY_CODE_MASK);
+	ie->set_keycode(p_keycode & KeyModifierMask::CODE_MASK);
+	ie->set_unicode(char32_t(p_keycode & KeyModifierMask::CODE_MASK));
 
-	if (p_keycode & KEY_MASK_SHIFT) {
+	if ((p_keycode & KeyModifierMask::SHIFT) != Key::NONE) {
 		ie->set_shift_pressed(true);
 	}
-	if (p_keycode & KEY_MASK_ALT) {
+	if ((p_keycode & KeyModifierMask::ALT) != Key::NONE) {
 		ie->set_alt_pressed(true);
 	}
-	if (p_keycode & KEY_MASK_CTRL) {
+	if ((p_keycode & KeyModifierMask::CTRL) != Key::NONE) {
 		ie->set_ctrl_pressed(true);
 	}
-	if (p_keycode & KEY_MASK_CMD) {
+	if ((p_keycode & KeyModifierMask::CMD) != Key::NONE) {
 		ie->set_command_pressed(true);
 	}
-	if (p_keycode & KEY_MASK_META) {
+	if ((p_keycode & KeyModifierMask::META) != Key::NONE) {
 		ie->set_meta_pressed(true);
 	}
 
@@ -419,22 +419,23 @@ bool InputEventKey::action_match(const Ref<InputEvent> &p_event, bool *p_pressed
 	}
 
 	bool match = false;
-	if (get_keycode() == 0) {
-		uint32_t code = get_physical_keycode_with_modifiers();
-		uint32_t event_code = key->get_physical_keycode_with_modifiers();
+	if (get_keycode() == Key::NONE) {
+		Key code = get_physical_keycode_with_modifiers();
+		Key event_code = key->get_physical_keycode_with_modifiers();
 
 		match = get_physical_keycode() == key->get_physical_keycode() && (!key->is_pressed() || (code & event_code) == code);
 	} else {
-		uint32_t code = get_keycode_with_modifiers();
-		uint32_t event_code = key->get_keycode_with_modifiers();
+		Key code = get_keycode_with_modifiers();
+		Key event_code = key->get_keycode_with_modifiers();
 
 		match = get_keycode() == key->get_keycode() && (!key->is_pressed() || (code & event_code) == code);
 	}
 	if (match) {
+		bool pressed = key->is_pressed();
 		if (p_pressed != nullptr) {
-			*p_pressed = key->is_pressed();
+			*p_pressed = pressed;
 		}
-		float strength = (p_pressed != nullptr && *p_pressed) ? 1.0f : 0.0f;
+		float strength = pressed ? 1.0f : 0.0f;
 		if (p_strength != nullptr) {
 			*p_strength = strength;
 		}
@@ -451,8 +452,13 @@ bool InputEventKey::is_match(const Ref<InputEvent> &p_event, bool p_exact_match)
 		return false;
 	}
 
-	return keycode == key->keycode &&
-		   (!p_exact_match || get_modifiers_mask() == key->get_modifiers_mask());
+	if (keycode == Key::NONE) {
+		return physical_keycode == key->physical_keycode &&
+				(!p_exact_match || get_modifiers_mask() == key->get_modifiers_mask());
+	} else {
+		return keycode == key->keycode &&
+				(!p_exact_match || get_modifiers_mask() == key->get_modifiers_mask());
+	}
 }
 
 void InputEventKey::_bind_methods() {
@@ -481,12 +487,12 @@ void InputEventKey::_bind_methods() {
 
 ///////////////////////////////////
 
-void InputEventMouse::set_button_mask(int p_mask) {
+void InputEventMouse::set_button_mask(MouseButton p_mask) {
 	button_mask = p_mask;
 	emit_changed();
 }
 
-int InputEventMouse::get_button_mask() const {
+MouseButton InputEventMouse::get_button_mask() const {
 	return button_mask;
 }
 
@@ -587,10 +593,11 @@ bool InputEventMouseButton::action_match(const Ref<InputEvent> &p_event, bool *p
 
 	bool match = mb->button_index == button_index;
 	if (match) {
+		bool pressed = mb->is_pressed();
 		if (p_pressed != nullptr) {
-			*p_pressed = mb->is_pressed();
+			*p_pressed = pressed;
 		}
-		float strength = (p_pressed != nullptr && *p_pressed) ? 1.0f : 0.0f;
+		float strength = pressed ? 1.0f : 0.0f;
 		if (p_strength != nullptr) {
 			*p_strength = strength;
 		}
@@ -609,7 +616,7 @@ bool InputEventMouseButton::is_match(const Ref<InputEvent> &p_event, bool p_exac
 	}
 
 	return button_index == mb->button_index &&
-		   (!p_exact_match || get_modifiers_mask() == mb->get_modifiers_mask());
+			(!p_exact_match || get_modifiers_mask() == mb->get_modifiers_mask());
 }
 
 static const char *_mouse_button_descriptions[9] = {
@@ -627,24 +634,24 @@ static const char *_mouse_button_descriptions[9] = {
 String InputEventMouseButton::as_text() const {
 	// Modifiers
 	String mods_text = InputEventWithModifiers::as_text();
-	String full_string = mods_text == "" ? "" : mods_text + "+";
+	String full_string = mods_text.is_empty() ? "" : mods_text + "+";
 
 	// Button
-	int idx = get_button_index();
+	MouseButton idx = get_button_index();
 	switch (idx) {
-		case MOUSE_BUTTON_LEFT:
-		case MOUSE_BUTTON_RIGHT:
-		case MOUSE_BUTTON_MIDDLE:
-		case MOUSE_BUTTON_WHEEL_UP:
-		case MOUSE_BUTTON_WHEEL_DOWN:
-		case MOUSE_BUTTON_WHEEL_LEFT:
-		case MOUSE_BUTTON_WHEEL_RIGHT:
-		case MOUSE_BUTTON_XBUTTON1:
-		case MOUSE_BUTTON_XBUTTON2:
-			full_string += RTR(_mouse_button_descriptions[idx - 1]); // button index starts from 1, array index starts from 0, so subtract 1
+		case MouseButton::LEFT:
+		case MouseButton::RIGHT:
+		case MouseButton::MIDDLE:
+		case MouseButton::WHEEL_UP:
+		case MouseButton::WHEEL_DOWN:
+		case MouseButton::WHEEL_LEFT:
+		case MouseButton::WHEEL_RIGHT:
+		case MouseButton::MB_XBUTTON1:
+		case MouseButton::MB_XBUTTON2:
+			full_string += RTR(_mouse_button_descriptions[(size_t)idx - 1]); // button index starts from 1, array index starts from 0, so subtract 1
 			break;
 		default:
-			full_string += RTR("Button") + " #" + itos(idx);
+			full_string += RTR("Button") + " #" + itos((int64_t)idx);
 			break;
 	}
 
@@ -660,27 +667,27 @@ String InputEventMouseButton::to_string() {
 	String p = is_pressed() ? "true" : "false";
 	String d = double_click ? "true" : "false";
 
-	int idx = get_button_index();
-	String button_string = itos(idx);
+	MouseButton idx = get_button_index();
+	String button_string = itos((int64_t)idx);
 
 	switch (idx) {
-		case MOUSE_BUTTON_LEFT:
-		case MOUSE_BUTTON_RIGHT:
-		case MOUSE_BUTTON_MIDDLE:
-		case MOUSE_BUTTON_WHEEL_UP:
-		case MOUSE_BUTTON_WHEEL_DOWN:
-		case MOUSE_BUTTON_WHEEL_LEFT:
-		case MOUSE_BUTTON_WHEEL_RIGHT:
-		case MOUSE_BUTTON_XBUTTON1:
-		case MOUSE_BUTTON_XBUTTON2:
-			button_string += " (" + RTR(_mouse_button_descriptions[idx - 1]) + ")"; // button index starts from 1, array index starts from 0, so subtract 1
+		case MouseButton::LEFT:
+		case MouseButton::RIGHT:
+		case MouseButton::MIDDLE:
+		case MouseButton::WHEEL_UP:
+		case MouseButton::WHEEL_DOWN:
+		case MouseButton::WHEEL_LEFT:
+		case MouseButton::WHEEL_RIGHT:
+		case MouseButton::MB_XBUTTON1:
+		case MouseButton::MB_XBUTTON2:
+			button_string += " (" + RTR(_mouse_button_descriptions[(size_t)idx - 1]) + ")"; // button index starts from 1, array index starts from 0, so subtract 1
 			break;
 		default:
 			break;
 	}
 
 	String mods = InputEventWithModifiers::as_text();
-	mods = mods == "" ? TTR("none") : mods;
+	mods = mods.is_empty() ? TTR("none") : mods;
 
 	// Work around the fact vformat can only take 5 substitutions but 6 need to be passed.
 	String index_and_mods = vformat("button_index=%s, mods=%s", button_index, mods);
@@ -771,23 +778,23 @@ String InputEventMouseMotion::as_text() const {
 }
 
 String InputEventMouseMotion::to_string() {
-	int button_mask = get_button_mask();
-	String button_mask_string = itos(button_mask);
-	switch (get_button_mask()) {
-		case MOUSE_BUTTON_MASK_LEFT:
-			button_mask_string += " (" + RTR(_mouse_button_descriptions[MOUSE_BUTTON_LEFT - 1]) + ")";
+	MouseButton button_mask = get_button_mask();
+	String button_mask_string = itos((int64_t)button_mask);
+	switch (button_mask) {
+		case MouseButton::MASK_LEFT:
+			button_mask_string += " (" + RTR(_mouse_button_descriptions[(size_t)MouseButton::LEFT - 1]) + ")";
 			break;
-		case MOUSE_BUTTON_MASK_MIDDLE:
-			button_mask_string += " (" + RTR(_mouse_button_descriptions[MOUSE_BUTTON_MIDDLE - 1]) + ")";
+		case MouseButton::MASK_MIDDLE:
+			button_mask_string += " (" + RTR(_mouse_button_descriptions[(size_t)MouseButton::MIDDLE - 1]) + ")";
 			break;
-		case MOUSE_BUTTON_MASK_RIGHT:
-			button_mask_string += " (" + RTR(_mouse_button_descriptions[MOUSE_BUTTON_RIGHT - 1]) + ")";
+		case MouseButton::MASK_RIGHT:
+			button_mask_string += " (" + RTR(_mouse_button_descriptions[(size_t)MouseButton::RIGHT - 1]) + ")";
 			break;
-		case MOUSE_BUTTON_MASK_XBUTTON1:
-			button_mask_string += " (" + RTR(_mouse_button_descriptions[MOUSE_BUTTON_XBUTTON1 - 1]) + ")";
+		case MouseButton::MASK_XBUTTON1:
+			button_mask_string += " (" + RTR(_mouse_button_descriptions[(size_t)MouseButton::MB_XBUTTON1 - 1]) + ")";
 			break;
-		case MOUSE_BUTTON_MASK_XBUTTON2:
-			button_mask_string += " (" + RTR(_mouse_button_descriptions[MOUSE_BUTTON_XBUTTON2 - 1]) + ")";
+		case MouseButton::MASK_XBUTTON2:
+			button_mask_string += " (" + RTR(_mouse_button_descriptions[(size_t)MouseButton::MB_XBUTTON2 - 1]) + ")";
 			break;
 		default:
 			break;
@@ -862,6 +869,8 @@ void InputEventMouseMotion::_bind_methods() {
 ///////////////////////////////////
 
 void InputEventJoypadMotion::set_axis(JoyAxis p_axis) {
+	ERR_FAIL_COND(p_axis < JoyAxis::LEFT_X || p_axis > JoyAxis::MAX);
+
 	axis = p_axis;
 	emit_changed();
 }
@@ -926,10 +935,10 @@ bool InputEventJoypadMotion::is_match(const Ref<InputEvent> &p_event, bool p_exa
 	}
 
 	return axis == jm->axis &&
-		   (!p_exact_match || ((axis_value < 0) == (jm->axis_value < 0)));
+			(!p_exact_match || ((axis_value < 0) == (jm->axis_value < 0)));
 }
 
-static const char *_joy_axis_descriptions[JOY_AXIS_MAX] = {
+static const char *_joy_axis_descriptions[(size_t)JoyAxis::MAX] = {
 	TTRC("Left Stick X-Axis, Joystick 0 X-Axis"),
 	TTRC("Left Stick Y-Axis, Joystick 0 Y-Axis"),
 	TTRC("Right Stick X-Axis, Joystick 1 X-Axis"),
@@ -943,7 +952,7 @@ static const char *_joy_axis_descriptions[JOY_AXIS_MAX] = {
 };
 
 String InputEventJoypadMotion::as_text() const {
-	String desc = axis < JOY_AXIS_MAX ? RTR(_joy_axis_descriptions[axis]) : TTR("Unknown Joypad Axis");
+	String desc = axis < JoyAxis::MAX ? RTR(_joy_axis_descriptions[(size_t)axis]) : TTR("Unknown Joypad Axis");
 
 	return vformat(TTR("Joypad Motion on Axis %d (%s) with Value %.2f"), axis, desc, axis_value);
 }
@@ -998,10 +1007,11 @@ bool InputEventJoypadButton::action_match(const Ref<InputEvent> &p_event, bool *
 
 	bool match = button_index == jb->button_index;
 	if (match) {
+		bool pressed = jb->is_pressed();
 		if (p_pressed != nullptr) {
-			*p_pressed = jb->is_pressed();
+			*p_pressed = pressed;
 		}
-		float strength = (p_pressed != nullptr && *p_pressed) ? 1.0f : 0.0f;
+		float strength = pressed ? 1.0f : 0.0f;
 		if (p_strength != nullptr) {
 			*p_strength = strength;
 		}
@@ -1022,7 +1032,7 @@ bool InputEventJoypadButton::is_match(const Ref<InputEvent> &p_event, bool p_exa
 	return button_index == button->button_index;
 }
 
-static const char *_joy_button_descriptions[JOY_BUTTON_SDL_MAX] = {
+static const char *_joy_button_descriptions[(size_t)JoyButton::SDL_MAX] = {
 	TTRC("Bottom Action, Sony Cross, Xbox A, Nintendo B"),
 	TTRC("Right Action, Sony Circle, Xbox B, Nintendo A"),
 	TTRC("Left Action, Sony Square, Xbox X, Nintendo Y"),
@@ -1047,10 +1057,10 @@ static const char *_joy_button_descriptions[JOY_BUTTON_SDL_MAX] = {
 };
 
 String InputEventJoypadButton::as_text() const {
-	String text = "Joypad Button " + itos(button_index);
+	String text = "Joypad Button " + itos((int64_t)button_index);
 
-	if (button_index >= 0 && button_index < JOY_BUTTON_SDL_MAX) {
-		text += vformat(" (%s)", _joy_button_descriptions[button_index]);
+	if (button_index > JoyButton::INVALID && button_index < JoyButton::SDL_MAX) {
+		text += vformat(" (%s)", _joy_button_descriptions[(size_t)button_index]);
 	}
 
 	if (pressure != 0) {
@@ -1291,10 +1301,11 @@ bool InputEventAction::action_match(const Ref<InputEvent> &p_event, bool *p_pres
 
 	bool match = action == act->action;
 	if (match) {
+		bool pressed = act->pressed;
 		if (p_pressed != nullptr) {
-			*p_pressed = act->pressed;
+			*p_pressed = pressed;
 		}
-		float strength = (p_pressed != nullptr && *p_pressed) ? 1.0f : 0.0f;
+		float strength = pressed ? 1.0f : 0.0f;
 		if (p_strength != nullptr) {
 			*p_strength = strength;
 		}
@@ -1495,7 +1506,7 @@ int InputEventMIDI::get_controller_value() const {
 }
 
 String InputEventMIDI::as_text() const {
-	return vformat(RTR("MIDI Input on Channel=%s Message=%s"), itos(channel), itos(message));
+	return vformat(RTR("MIDI Input on Channel=%s Message=%s"), itos(channel), itos((int64_t)message));
 }
 
 String InputEventMIDI::to_string() {
@@ -1541,14 +1552,25 @@ Ref<Shortcut> InputEventShortcut::get_shortcut() {
 	return shortcut;
 }
 
+void InputEventShortcut::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("set_shortcut", "shortcut"), &InputEventShortcut::set_shortcut);
+	ClassDB::bind_method(D_METHOD("get_shortcut"), &InputEventShortcut::get_shortcut);
+
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "shortcut", PROPERTY_HINT_RESOURCE_TYPE, "Shortcut"), "set_shortcut", "get_shortcut");
+}
+
 bool InputEventShortcut::is_pressed() const {
 	return true;
 }
 
 String InputEventShortcut::as_text() const {
+	ERR_FAIL_COND_V(shortcut.is_null(), "None");
+
 	return vformat(RTR("Input Event with Shortcut=%s"), shortcut->get_as_text());
 }
 
 String InputEventShortcut::to_string() {
+	ERR_FAIL_COND_V(shortcut.is_null(), "None");
+
 	return vformat("InputEventShortcut: shortcut=%s", shortcut->get_as_text());
 }

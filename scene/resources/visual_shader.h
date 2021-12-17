@@ -57,6 +57,7 @@ public:
 		TYPE_START_CUSTOM,
 		TYPE_PROCESS_CUSTOM,
 		TYPE_SKY,
+		TYPE_FOG,
 		TYPE_MAX
 	};
 
@@ -69,7 +70,7 @@ public:
 
 	struct DefaultTextureParam {
 		StringName name;
-		Ref<Texture2D> param;
+		List<Ref<Texture2D>> params;
 	};
 
 private:
@@ -254,6 +255,8 @@ public:
 	void set_input_port_connected(int p_port, bool p_connected);
 	virtual bool is_generate_input_var(int p_port) const;
 
+	virtual bool has_output_port_preview(int p_port) const;
+
 	virtual bool is_output_port_expandable(int p_port) const;
 	void _set_output_ports_expanded(const Array &p_data);
 	Array _get_output_ports_expanded() const;
@@ -269,6 +272,7 @@ public:
 	void set_disabled(bool p_disabled = true);
 
 	virtual Vector<StringName> get_editable_properties() const;
+	virtual Map<StringName, String> get_editable_properties_names() const;
 
 	virtual Vector<VisualShader::DefaultTextureParam> get_default_texture_parameters(VisualShader::Type p_type, int p_id) const;
 	virtual String generate_global(Shader::Mode p_mode, VisualShader::Type p_type, int p_id) const;
@@ -313,6 +317,20 @@ protected:
 	virtual void set_default_input_values(const Array &p_values) override;
 	virtual void remove_input_port_default_value(int p_port) override;
 	virtual void clear_default_input_values() override;
+
+	GDVIRTUAL0RC(String, _get_name)
+	GDVIRTUAL0RC(String, _get_description)
+	GDVIRTUAL0RC(String, _get_category)
+	GDVIRTUAL0RC(int, _get_return_icon_type)
+	GDVIRTUAL0RC(int, _get_input_port_count)
+	GDVIRTUAL1RC(int, _get_input_port_type, int)
+	GDVIRTUAL1RC(String, _get_input_port_name, int)
+	GDVIRTUAL0RC(int, _get_output_port_count)
+	GDVIRTUAL1RC(int, _get_output_port_type, int)
+	GDVIRTUAL1RC(String, _get_output_port_name, int)
+	GDVIRTUAL4RC(String, _get_code, Vector<String>, TypedArray<String>, Shader::Mode, VisualShader::Type)
+	GDVIRTUAL1RC(String, _get_global_code, Shader::Mode)
+	GDVIRTUAL0RC(bool, _is_highend)
 
 protected:
 	void _set_input_port_default_value(int p_port, const Variant &p_value);
@@ -435,6 +453,7 @@ public:
 		QUAL_NONE,
 		QUAL_GLOBAL,
 		QUAL_INSTANCE,
+		QUAL_MAX,
 	};
 
 private:
@@ -677,5 +696,7 @@ public:
 
 	VisualShaderNodeGlobalExpression();
 };
+
+extern String make_unique_id(VisualShader::Type p_type, int p_id, const String &p_name);
 
 #endif // VISUAL_SHADER_H

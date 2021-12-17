@@ -44,11 +44,12 @@ void EditorDirDialog::_update_dir(TreeItem *p_item, EditorFileSystemDirectory *p
 
 	p_item->set_metadata(0, p_dir->get_path());
 	p_item->set_icon(0, tree->get_theme_icon(SNAME("Folder"), SNAME("EditorIcons")));
+	p_item->set_icon_modulate(0, tree->get_theme_color(SNAME("folder_icon_modulate"), SNAME("FileDialog")));
 
 	if (!p_item->get_parent()) {
 		p_item->set_text(0, "res://");
 	} else {
-		if (!opened_paths.has(path) && (p_select_path == String() || !p_select_path.begins_with(path))) {
+		if (!opened_paths.has(path) && (p_select_path.is_empty() || !p_select_path.begins_with(path))) {
 			p_item->set_collapsed(true);
 		}
 

@@ -55,9 +55,14 @@ bool EditorDebuggerRemoteObject::_get(const StringName &p_name, Variant &r_ret) 
 }
 
 void EditorDebuggerRemoteObject::_get_property_list(List<PropertyInfo> *p_list) const {
-	p_list->clear(); //sorry, no want category
-	for (const PropertyInfo &E : prop_list) {
-		p_list->push_back(E);
+	p_list->clear(); // Sorry, no want category.
+	for (const PropertyInfo &prop : prop_list) {
+		if (prop.name == "script") {
+			// Skip the script property, it's always added by the non-virtual method.
+			continue;
+		}
+
+		p_list->push_back(prop);
 	}
 }
 
@@ -200,12 +205,12 @@ ObjectID EditorDebuggerInspector::add_object(const Array &p_arr) {
 }
 
 void EditorDebuggerInspector::clear_cache() {
-	for (Map<ObjectID, EditorDebuggerRemoteObject *>::Element *E = remote_objects.front(); E; E = E->next()) {
+	for (const KeyValue<ObjectID, EditorDebuggerRemoteObject *> &E : remote_objects) {
 		EditorNode *editor = EditorNode::get_singleton();
-		if (editor->get_editor_history()->get_current() == E->value()->get_instance_id()) {
+		if (editor->get_editor_history()->get_current() == E.value->get_instance_id()) {
 			editor->push_item(nullptr);
 		}
-		memdelete(E->value());
+		memdelete(E.value);
 	}
 	remote_objects.clear();
 	remote_dependencies.clear();

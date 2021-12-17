@@ -55,7 +55,8 @@ protected:
 	};
 
 	struct BlitPushConstant {
-		float rect[4];
+		float src_rect[4];
+		float dst_rect[4];
 
 		float eye_center[2];
 		float k1;
@@ -114,8 +115,6 @@ public:
 	static void make_current() {
 		_create_func = _create_current;
 	}
-
-	virtual bool is_low_end() const { return false; }
 
 	static RendererCompositorRD *singleton;
 	RendererCompositorRD();

@@ -51,7 +51,7 @@ static Ref<StyleBoxTexture> make_stylebox(T p_src, float p_left, float p_top, fl
 	} else {
 		texture = Ref<ImageTexture>(memnew(ImageTexture));
 		Ref<Image> img = memnew(Image(p_src));
-		const Size2 orig_size = Size2(img->get_width(), img->get_height());
+		const Size2 orig_size = img->get_size();
 		img->convert(Image::FORMAT_RGBA8);
 		img->resize(orig_size.x * scale, orig_size.y * scale);
 
@@ -97,7 +97,7 @@ template <class T>
 static Ref<Texture2D> make_icon(T p_src) {
 	Ref<ImageTexture> texture(memnew(ImageTexture));
 	Ref<Image> img = memnew(Image(p_src));
-	const Size2 orig_size = Size2(img->get_width(), img->get_height());
+	const Size2 orig_size = img->get_size();
 	img->convert(Image::FORMAT_RGBA8);
 	img->resize(orig_size.x * scale, orig_size.y * scale);
 	texture->create_from_image(img);
@@ -147,6 +147,7 @@ void fill_default_theme(Ref<Theme> &theme, const Ref<Font> &default_font, const 
 	Color control_font_lower_color = Color(0.63, 0.63, 0.63);
 	Color control_font_low_color = Color(0.69, 0.69, 0.69);
 	Color control_font_hover_color = Color(0.94, 0.94, 0.94);
+	Color control_font_focus_color = Color(0.94, 0.94, 0.94);
 	Color control_font_disabled_color = Color(0.9, 0.9, 0.9, 0.2);
 	Color control_font_pressed_color = Color(1, 1, 1);
 
@@ -185,6 +186,7 @@ void fill_default_theme(Ref<Theme> &theme, const Ref<Font> &default_font, const 
 	theme->set_color("font_color", "Button", control_font_color);
 	theme->set_color("font_pressed_color", "Button", control_font_pressed_color);
 	theme->set_color("font_hover_color", "Button", control_font_hover_color);
+	theme->set_color("font_focus_color", "Button", control_font_focus_color);
 	theme->set_color("font_hover_pressed_color", "Button", control_font_pressed_color);
 	theme->set_color("font_disabled_color", "Button", control_font_disabled_color);
 	theme->set_color("font_outline_color", "Button", Color(1, 1, 1));
@@ -193,6 +195,7 @@ void fill_default_theme(Ref<Theme> &theme, const Ref<Font> &default_font, const 
 	theme->set_color("icon_pressed_color", "Button", Color(1, 1, 1, 1));
 	theme->set_color("icon_hover_color", "Button", Color(1, 1, 1, 1));
 	theme->set_color("icon_hover_pressed_color", "Button", Color(1, 1, 1, 1));
+	theme->set_color("icon_focus_color", "Button", Color(1, 1, 1, 1));
 	theme->set_color("icon_disabled_color", "Button", Color(1, 1, 1, 1));
 
 	theme->set_constant("hseparation", "Button", 2 * scale);
@@ -207,30 +210,11 @@ void fill_default_theme(Ref<Theme> &theme, const Ref<Font> &default_font, const 
 	theme->set_color("font_color", "LinkButton", control_font_color);
 	theme->set_color("font_pressed_color", "LinkButton", control_font_pressed_color);
 	theme->set_color("font_hover_color", "LinkButton", control_font_hover_color);
+	theme->set_color("font_focus_color", "LinkButton", control_font_focus_color);
 	theme->set_color("font_outline_color", "LinkButton", Color(1, 1, 1));
 
 	theme->set_constant("outline_size", "LinkButton", 0);
 	theme->set_constant("underline_spacing", "LinkButton", 2 * scale);
-
-	// ColorPickerButton
-
-	theme->set_stylebox("normal", "ColorPickerButton", sb_button_normal);
-	theme->set_stylebox("pressed", "ColorPickerButton", sb_button_pressed);
-	theme->set_stylebox("hover", "ColorPickerButton", sb_button_hover);
-	theme->set_stylebox("disabled", "ColorPickerButton", sb_button_disabled);
-	theme->set_stylebox("focus", "ColorPickerButton", sb_button_focus);
-
-	theme->set_font("font", "ColorPickerButton", Ref<Font>());
-	theme->set_font_size("font_size", "ColorPickerButton", -1);
-
-	theme->set_color("font_color", "ColorPickerButton", Color(1, 1, 1, 1));
-	theme->set_color("font_pressed_color", "ColorPickerButton", Color(0.8, 0.8, 0.8, 1));
-	theme->set_color("font_hover_color", "ColorPickerButton", Color(1, 1, 1, 1));
-	theme->set_color("font_disabled_color", "ColorPickerButton", Color(0.9, 0.9, 0.9, 0.3));
-	theme->set_color("font_outline_color", "ColorPickerButton", Color(1, 1, 1));
-
-	theme->set_constant("hseparation", "ColorPickerButton", 2 * scale);
-	theme->set_constant("outline_size", "ColorPickerButton", 0);
 
 	// OptionButton
 
@@ -265,6 +249,7 @@ void fill_default_theme(Ref<Theme> &theme, const Ref<Font> &default_font, const 
 	theme->set_color("font_color", "OptionButton", control_font_color);
 	theme->set_color("font_pressed_color", "OptionButton", control_font_pressed_color);
 	theme->set_color("font_hover_color", "OptionButton", control_font_hover_color);
+	theme->set_color("font_focus_color", "OptionButton", control_font_focus_color);
 	theme->set_color("font_disabled_color", "OptionButton", control_font_disabled_color);
 	theme->set_color("font_outline_color", "OptionButton", Color(1, 1, 1));
 
@@ -286,6 +271,7 @@ void fill_default_theme(Ref<Theme> &theme, const Ref<Font> &default_font, const 
 	theme->set_color("font_color", "MenuButton", control_font_color);
 	theme->set_color("font_pressed_color", "MenuButton", control_font_pressed_color);
 	theme->set_color("font_hover_color", "MenuButton", control_font_hover_color);
+	theme->set_color("font_focus_color", "MenuButton", control_font_focus_color);
 	theme->set_color("font_disabled_color", "MenuButton", Color(1, 1, 1, 0.3));
 	theme->set_color("font_outline_color", "MenuButton", Color(1, 1, 1));
 
@@ -328,6 +314,7 @@ void fill_default_theme(Ref<Theme> &theme, const Ref<Font> &default_font, const 
 	theme->set_color("font_pressed_color", "CheckBox", control_font_pressed_color);
 	theme->set_color("font_hover_color", "CheckBox", control_font_hover_color);
 	theme->set_color("font_hover_pressed_color", "CheckBox", control_font_pressed_color);
+	theme->set_color("font_focus_color", "CheckBox", control_font_focus_color);
 	theme->set_color("font_disabled_color", "CheckBox", control_font_disabled_color);
 	theme->set_color("font_outline_color", "CheckBox", Color(1, 1, 1));
 
@@ -367,6 +354,7 @@ void fill_default_theme(Ref<Theme> &theme, const Ref<Font> &default_font, const 
 	theme->set_color("font_pressed_color", "CheckButton", control_font_pressed_color);
 	theme->set_color("font_hover_color", "CheckButton", control_font_hover_color);
 	theme->set_color("font_hover_pressed_color", "CheckButton", control_font_pressed_color);
+	theme->set_color("font_focus_color", "CheckButton", control_font_focus_color);
 	theme->set_color("font_disabled_color", "CheckButton", control_font_disabled_color);
 	theme->set_color("font_outline_color", "CheckButton", Color(1, 1, 1));
 
@@ -458,6 +446,8 @@ void fill_default_theme(Ref<Theme> &theme, const Ref<Font> &default_font, const 
 	theme->set_color("caret_color", "TextEdit", control_font_color);
 	theme->set_color("caret_background_color", "TextEdit", Color(0, 0, 0));
 	theme->set_color("word_highlighted_color", "TextEdit", Color(0.8, 0.9, 0.9, 0.15));
+	theme->set_color("search_result_color", "TextEdit", Color(0.3, 0.3, 0.3));
+	theme->set_color("search_result_border_color", "TextEdit", Color(0.3, 0.3, 0.3, 0.4));
 
 	theme->set_constant("line_spacing", "TextEdit", 4 * scale);
 	theme->set_constant("outline_size", "TextEdit", 0);
@@ -503,6 +493,8 @@ void fill_default_theme(Ref<Theme> &theme, const Ref<Font> &default_font, const 
 	theme->set_color("line_number_color", "CodeEdit", Color(0.67, 0.67, 0.67, 0.4));
 	theme->set_color("word_highlighted_color", "CodeEdit", Color(0.8, 0.9, 0.9, 0.15));
 	theme->set_color("line_length_guideline_color", "CodeEdit", Color(0.3, 0.5, 0.8, 0.1));
+	theme->set_color("search_result_color", "CodeEdit", Color(0.3, 0.3, 0.3));
+	theme->set_color("search_result_border_color", "CodeEdit", Color(0.3, 0.3, 0.3, 0.4));
 
 	theme->set_constant("completion_lines", "CodeEdit", 7);
 	theme->set_constant("completion_max_width", "CodeEdit", 50);
@@ -522,8 +514,10 @@ void fill_default_theme(Ref<Theme> &theme, const Ref<Font> &default_font, const 
 
 	theme->set_icon("increment", "HScrollBar", empty_icon);
 	theme->set_icon("increment_highlight", "HScrollBar", empty_icon);
+	theme->set_icon("increment_pressed", "HScrollBar", empty_icon);
 	theme->set_icon("decrement", "HScrollBar", empty_icon);
 	theme->set_icon("decrement_highlight", "HScrollBar", empty_icon);
+	theme->set_icon("decrement_pressed", "HScrollBar", empty_icon);
 
 	// VScrollBar
 
@@ -535,8 +529,10 @@ void fill_default_theme(Ref<Theme> &theme, const Ref<Font> &default_font, const 
 
 	theme->set_icon("increment", "VScrollBar", empty_icon);
 	theme->set_icon("increment_highlight", "VScrollBar", empty_icon);
+	theme->set_icon("increment_pressed", "VScrollBar", empty_icon);
 	theme->set_icon("decrement", "VScrollBar", empty_icon);
 	theme->set_icon("decrement_highlight", "VScrollBar", empty_icon);
+	theme->set_icon("decrement_pressed", "VScrollBar", empty_icon);
 
 	// HSlider
 
@@ -704,6 +700,7 @@ void fill_default_theme(Ref<Theme> &theme, const Ref<Font> &default_font, const 
 
 	theme->set_icon("checked", "Tree", make_icon(checked_png));
 	theme->set_icon("unchecked", "Tree", make_icon(unchecked_png));
+	theme->set_icon("indeterminate", "Tree", make_icon(indeterminate_png));
 	theme->set_icon("updown", "Tree", make_icon(updown_png));
 	theme->set_icon("select_arrow", "Tree", make_icon(dropdown_png));
 	theme->set_icon("arrow", "Tree", make_icon(arrow_down_png));
@@ -796,30 +793,30 @@ void fill_default_theme(Ref<Theme> &theme, const Ref<Font> &default_font, const 
 	theme->set_constant("icon_separation", "TabContainer", 4 * scale);
 	theme->set_constant("outline_size", "TabContainer", 0);
 
-	// Tabs
+	// TabBar
 
-	theme->set_stylebox("tab_selected", "Tabs", sb_expand(make_stylebox(tab_current_png, 4, 3, 4, 1, 16, 3, 16, 2), 2, 2, 2, 2));
-	theme->set_stylebox("tab_unselected", "Tabs", sb_expand(make_stylebox(tab_behind_png, 5, 4, 5, 1, 16, 5, 16, 2), 3, 3, 3, 3));
-	theme->set_stylebox("tab_disabled", "Tabs", sb_expand(make_stylebox(tab_disabled_png, 5, 5, 5, 1, 16, 6, 16, 4), 3, 0, 3, 3));
-	theme->set_stylebox("button_pressed", "Tabs", make_stylebox(button_pressed_png, 4, 4, 4, 4));
-	theme->set_stylebox("button", "Tabs", make_stylebox(button_normal_png, 4, 4, 4, 4));
+	theme->set_stylebox("tab_selected", "TabBar", sb_expand(make_stylebox(tab_current_png, 4, 3, 4, 1, 16, 3, 16, 2), 2, 2, 2, 2));
+	theme->set_stylebox("tab_unselected", "TabBar", sb_expand(make_stylebox(tab_behind_png, 5, 4, 5, 1, 16, 5, 16, 2), 3, 3, 3, 3));
+	theme->set_stylebox("tab_disabled", "TabBar", sb_expand(make_stylebox(tab_disabled_png, 5, 5, 5, 1, 16, 6, 16, 4), 3, 0, 3, 3));
+	theme->set_stylebox("close_bg_pressed", "TabBar", make_stylebox(button_pressed_png, 4, 4, 4, 4));
+	theme->set_stylebox("close_bg_highlight", "TabBar", make_stylebox(button_normal_png, 4, 4, 4, 4));
 
-	theme->set_icon("increment", "Tabs", make_icon(scroll_button_right_png));
-	theme->set_icon("increment_highlight", "Tabs", make_icon(scroll_button_right_hl_png));
-	theme->set_icon("decrement", "Tabs", make_icon(scroll_button_left_png));
-	theme->set_icon("decrement_highlight", "Tabs", make_icon(scroll_button_left_hl_png));
-	theme->set_icon("close", "Tabs", make_icon(tab_close_png));
+	theme->set_icon("increment", "TabBar", make_icon(scroll_button_right_png));
+	theme->set_icon("increment_highlight", "TabBar", make_icon(scroll_button_right_hl_png));
+	theme->set_icon("decrement", "TabBar", make_icon(scroll_button_left_png));
+	theme->set_icon("decrement_highlight", "TabBar", make_icon(scroll_button_left_hl_png));
+	theme->set_icon("close", "TabBar", make_icon(tab_close_png));
 
-	theme->set_font("font", "Tabs", Ref<Font>());
-	theme->set_font_size("font_size", "Tabs", -1);
+	theme->set_font("font", "TabBar", Ref<Font>());
+	theme->set_font_size("font_size", "TabBar", -1);
 
-	theme->set_color("font_selected_color", "Tabs", control_font_hover_color);
-	theme->set_color("font_unselected_color", "Tabs", control_font_low_color);
-	theme->set_color("font_disabled_color", "Tabs", control_font_disabled_color);
-	theme->set_color("font_outline_color", "Tabs", Color(1, 1, 1));
+	theme->set_color("font_selected_color", "TabBar", control_font_hover_color);
+	theme->set_color("font_unselected_color", "TabBar", control_font_low_color);
+	theme->set_color("font_disabled_color", "TabBar", control_font_disabled_color);
+	theme->set_color("font_outline_color", "TabBar", Color(1, 1, 1));
 
-	theme->set_constant("hseparation", "Tabs", 4 * scale);
-	theme->set_constant("outline_size", "Tabs", 0);
+	theme->set_constant("hseparation", "TabBar", 4 * scale);
+	theme->set_constant("outline_size", "TabBar", 0);
 
 	// Separators
 
@@ -858,7 +855,7 @@ void fill_default_theme(Ref<Theme> &theme, const Ref<Font> &default_font, const 
 	theme->set_icon("add_preset", "ColorPicker", make_icon(icon_add_png));
 	theme->set_icon("color_hue", "ColorPicker", make_icon(color_picker_hue_png));
 	theme->set_icon("color_sample", "ColorPicker", make_icon(color_picker_sample_png));
-	theme->set_icon("preset_bg", "ColorPicker", make_icon(mini_checkerboard_png));
+	theme->set_icon("sample_bg", "ColorPicker", make_icon(mini_checkerboard_png));
 	theme->set_icon("overbright_indicator", "ColorPicker", make_icon(overbright_indicator_png));
 	theme->set_icon("bar_arrow", "ColorPicker", make_icon(bar_arrow_png));
 	theme->set_icon("picker_cursor", "ColorPicker", make_icon(picker_cursor_png));
@@ -866,6 +863,35 @@ void fill_default_theme(Ref<Theme> &theme, const Ref<Font> &default_font, const 
 	// ColorPickerButton
 
 	theme->set_icon("bg", "ColorPickerButton", make_icon(mini_checkerboard_png));
+	theme->set_stylebox("normal", "ColorPickerButton", sb_button_normal);
+	theme->set_stylebox("pressed", "ColorPickerButton", sb_button_pressed);
+	theme->set_stylebox("hover", "ColorPickerButton", sb_button_hover);
+	theme->set_stylebox("disabled", "ColorPickerButton", sb_button_disabled);
+	theme->set_stylebox("focus", "ColorPickerButton", sb_button_focus);
+
+	theme->set_font("font", "ColorPickerButton", Ref<Font>());
+	theme->set_font_size("font_size", "ColorPickerButton", -1);
+
+	theme->set_color("font_color", "ColorPickerButton", Color(1, 1, 1, 1));
+	theme->set_color("font_pressed_color", "ColorPickerButton", Color(0.8, 0.8, 0.8, 1));
+	theme->set_color("font_hover_color", "ColorPickerButton", Color(1, 1, 1, 1));
+	theme->set_color("font_focus_color", "ColorPickerButton", Color(1, 1, 1, 1));
+	theme->set_color("font_disabled_color", "ColorPickerButton", Color(0.9, 0.9, 0.9, 0.3));
+	theme->set_color("font_outline_color", "ColorPickerButton", Color(1, 1, 1));
+
+	theme->set_constant("hseparation", "ColorPickerButton", 2 * scale);
+	theme->set_constant("outline_size", "ColorPickerButton", 0);
+
+	// ColorPresetButton
+
+	Ref<StyleBoxFlat> preset_sb = make_flat_stylebox(Color(1, 1, 1), 2, 2, 2, 2);
+	preset_sb->set_corner_radius_all(2);
+	preset_sb->set_corner_detail(2);
+	preset_sb->set_anti_aliased(false);
+
+	theme->set_stylebox("preset_fg", "ColorPresetButton", preset_sb);
+	theme->set_icon("preset_bg", "ColorPresetButton", make_icon(mini_checkerboard_png));
+	theme->set_icon("overbright_indicator", "ColorPresetButton", make_icon(overbright_indicator_png));
 
 	// TooltipPanel
 
@@ -914,9 +940,9 @@ void fill_default_theme(Ref<Theme> &theme, const Ref<Font> &default_font, const 
 
 	theme->set_constant("shadow_offset_x", "RichTextLabel", 1 * scale);
 	theme->set_constant("shadow_offset_y", "RichTextLabel", 1 * scale);
-	theme->set_constant("shadow_as_outline", "RichTextLabel", 0 * scale);
+	theme->set_constant("shadow_outline_size", "RichTextLabel", 1 * scale);
 
-	theme->set_constant("line_separation", "RichTextLabel", 1 * scale);
+	theme->set_constant("line_separation", "RichTextLabel", 0 * scale);
 	theme->set_constant("table_hseparation", "RichTextLabel", 3 * scale);
 	theme->set_constant("table_vseparation", "RichTextLabel", 3 * scale);
 
@@ -1011,16 +1037,23 @@ void make_default_theme(bool p_hidpi, Ref<Font> p_font) {
 
 		Ref<FontData> dynamic_font_data;
 		dynamic_font_data.instantiate();
-		dynamic_font_data->load_memory(_font_OpenSans_SemiBold, _font_OpenSans_SemiBold_size, "ttf", default_font_size);
+		dynamic_font_data->set_data_ptr(_font_OpenSans_SemiBold, _font_OpenSans_SemiBold_size);
 		dynamic_font->add_data(dynamic_font_data);
 
 		default_font = dynamic_font;
 	}
 
 	Ref<Font> large_font = default_font;
-	fill_default_theme(t, default_font, large_font, default_icon, default_style, p_hidpi ? 2.0 : 1.0);
+
+	float default_scale = 1.0;
+	if (p_hidpi) {
+		default_scale = 2.0;
+	}
+
+	fill_default_theme(t, default_font, large_font, default_icon, default_style, default_scale);
 
 	Theme::set_default(t);
+	Theme::set_default_base_scale(default_scale);
 	Theme::set_default_icon(default_icon);
 	Theme::set_default_style(default_style);
 	Theme::set_default_font(default_font);

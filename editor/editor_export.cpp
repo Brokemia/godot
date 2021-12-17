@@ -32,6 +32,7 @@
 
 #include "core/config/project_settings.h"
 #include "core/crypto/crypto_core.h"
+#include "core/extension/native_extension.h"
 #include "core/io/config_file.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
@@ -81,7 +82,7 @@ bool EditorExportPreset::_get(const StringName &p_name, Variant &r_ret) const {
 
 void EditorExportPreset::_get_property_list(List<PropertyInfo> *p_list) const {
 	for (const PropertyInfo &E : properties) {
-		if (platform->get_option_visibility(E.name, values)) {
+		if (platform->get_export_option_visibility(E.name, values)) {
 			p_list->push_back(E);
 		}
 	}
@@ -263,7 +264,7 @@ void EditorExportPlatform::gen_debug_flags(Vector<String> &r_flags, int p_flags)
 		String passwd = EditorSettings::get_singleton()->get("filesystem/file_server/password");
 		r_flags.push_back("--remote-fs");
 		r_flags.push_back(host + ":" + itos(port));
-		if (passwd != "") {
+		if (!passwd.is_empty()) {
 			r_flags.push_back("--remote-fs-password");
 			r_flags.push_back(passwd);
 		}
@@ -450,6 +451,9 @@ void EditorExportPlatform::_export_find_resources(EditorFileSystemDirectory *p_d
 	}
 
 	for (int i = 0; i < p_dir->get_file_count(); i++) {
+		if (p_dir->get_file_type(i) == "TextFile") {
+			continue;
+		}
 		p_paths.insert(p_dir->get_file_path(i));
 	}
 }
@@ -484,8 +488,8 @@ void EditorExportPlatform::_edit_files_with_filter(DirAccess *da, const Vector<S
 	String cur_dir_no_prefix = cur_dir.replace("res://", "");
 
 	Vector<String> dirs;
-	String f;
-	while ((f = da->get_next()) != "") {
+	String f = da->get_next();
+	while (!f.is_empty()) {
 		if (da->current_is_dir()) {
 			dirs.push_back(f);
 		} else {
@@ -502,6 +506,7 @@ void EditorExportPlatform::_edit_files_with_filter(DirAccess *da, const Vector<S
 				}
 			}
 		}
+		f = da->get_next();
 	}
 
 	da->list_dir_end();
@@ -523,7 +528,7 @@ void EditorExportPlatform::_edit_files_with_filter(DirAccess *da, const Vector<S
 }
 
 void EditorExportPlatform::_edit_filter_list(Set<String> &r_list, const String &p_filter, bool exclude) {
-	if (p_filter == "") {
+	if (p_filter.is_empty()) {
 		return;
 	}
 	Vector<String> split = p_filter.split(",");
@@ -624,21 +629,15 @@ Vector<String> EditorExportPlugin::get_ios_project_static_libs() const {
 }
 
 void EditorExportPlugin::_export_file_script(const String &p_path, const String &p_type, const Vector<String> &p_features) {
-	if (get_script_instance()) {
-		get_script_instance()->call("_export_file", p_path, p_type, p_features);
-	}
+	GDVIRTUAL_CALL(_export_file, p_path, p_type, p_features);
 }
 
 void EditorExportPlugin::_export_begin_script(const Vector<String> &p_features, bool p_debug, const String &p_path, int p_flags) {
-	if (get_script_instance()) {
-		get_script_instance()->call("_export_begin", p_features, p_debug, p_path, p_flags);
-	}
+	GDVIRTUAL_CALL(_export_begin, p_features, p_debug, p_path, p_flags);
 }
 
 void EditorExportPlugin::_export_end_script() {
-	if (get_script_instance()) {
-		get_script_instance()->call("_export_end");
-	}
+	GDVIRTUAL_CALL(_export_end);
 }
 
 void EditorExportPlugin::_export_file(const String &p_path, const String &p_type, const Set<String> &p_features) {
@@ -663,9 +662,9 @@ void EditorExportPlugin::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("add_ios_cpp_code", "code"), &EditorExportPlugin::add_ios_cpp_code);
 	ClassDB::bind_method(D_METHOD("skip"), &EditorExportPlugin::skip);
 
-	BIND_VMETHOD(MethodInfo("_export_file", PropertyInfo(Variant::STRING, "path"), PropertyInfo(Variant::STRING, "type"), PropertyInfo(Variant::PACKED_STRING_ARRAY, "features")));
-	BIND_VMETHOD(MethodInfo("_export_begin", PropertyInfo(Variant::PACKED_STRING_ARRAY, "features"), PropertyInfo(Variant::BOOL, "is_debug"), PropertyInfo(Variant::STRING, "path"), PropertyInfo(Variant::INT, "flags")));
-	BIND_VMETHOD(MethodInfo("_export_end"));
+	GDVIRTUAL_BIND(_export_file, "path", "type", "features");
+	GDVIRTUAL_BIND(_export_begin, "features", "is_debug", "path", "flags");
+	GDVIRTUAL_BIND(_export_end);
 }
 
 EditorExportPlugin::EditorExportPlugin() {
@@ -684,12 +683,12 @@ EditorExportPlatform::FeatureContainers EditorExportPlatform::get_feature_contai
 		result.features_pv.push_back(E);
 	}
 
-	if (p_preset->get_custom_features() != String()) {
+	if (!p_preset->get_custom_features().is_empty()) {
 		Vector<String> tmp_custom_list = p_preset->get_custom_features().split(",");
 
 		for (int i = 0; i < tmp_custom_list.size(); i++) {
 			String f = tmp_custom_list[i].strip_edges();
-			if (f != String()) {
+			if (!f.is_empty()) {
 				result.features.insert(f);
 				result.features_pv.push_back(f);
 			}
@@ -995,12 +994,12 @@ Error EditorExportPlatform::export_project_files(const Ref<EditorExportPreset> &
 
 	Vector<String> custom_list;
 
-	if (p_preset->get_custom_features() != String()) {
+	if (!p_preset->get_custom_features().is_empty()) {
 		Vector<String> tmp_custom_list = p_preset->get_custom_features().split(",");
 
 		for (int i = 0; i < tmp_custom_list.size(); i++) {
 			String f = tmp_custom_list[i].strip_edges();
-			if (f != String()) {
+			if (!f.is_empty()) {
 				custom_list.push_back(f);
 			}
 		}
@@ -1034,23 +1033,33 @@ Error EditorExportPlatform::export_project_files(const Ref<EditorExportPreset> &
 	// Store icon and splash images directly, they need to bypass the import system and be loaded as images
 	String icon = ProjectSettings::get_singleton()->get("application/config/icon");
 	String splash = ProjectSettings::get_singleton()->get("application/boot_splash/image");
-	if (icon != String() && FileAccess::exists(icon)) {
+	if (!icon.is_empty() && FileAccess::exists(icon)) {
 		Vector<uint8_t> array = FileAccess::get_file_as_array(icon);
 		err = p_func(p_udata, icon, array, idx, total, enc_in_filters, enc_ex_filters, key);
 		if (err != OK) {
 			return err;
 		}
 	}
-	if (splash != String() && FileAccess::exists(splash) && icon != splash) {
+	if (!splash.is_empty() && FileAccess::exists(splash) && icon != splash) {
 		Vector<uint8_t> array = FileAccess::get_file_as_array(splash);
 		err = p_func(p_udata, splash, array, idx, total, enc_in_filters, enc_ex_filters, key);
 		if (err != OK) {
 			return err;
 		}
 	}
-	if (FileAccess::exists(ResourceUID::CACHE_FILE)) {
-		Vector<uint8_t> array = FileAccess::get_file_as_array(ResourceUID::CACHE_FILE);
-		err = p_func(p_udata, ResourceUID::CACHE_FILE, array, idx, total, enc_in_filters, enc_ex_filters, key);
+	String resource_cache_file = ResourceUID::get_cache_file();
+	if (FileAccess::exists(resource_cache_file)) {
+		Vector<uint8_t> array = FileAccess::get_file_as_array(resource_cache_file);
+		err = p_func(p_udata, resource_cache_file, array, idx, total, enc_in_filters, enc_ex_filters, key);
+		if (err != OK) {
+			return err;
+		}
+	}
+
+	String extension_list_config_file = NativeExtension::get_extension_list_config_file();
+	if (FileAccess::exists(extension_list_config_file)) {
+		Vector<uint8_t> array = FileAccess::get_file_as_array(extension_list_config_file);
+		err = p_func(p_udata, extension_list_config_file, array, idx, total, enc_in_filters, enc_ex_filters, key);
 		if (err != OK) {
 			return err;
 		}
@@ -1350,7 +1359,7 @@ void EditorExportPlatform::gen_export_flags(Vector<String> &r_flags, int p_flags
 		String passwd = EditorSettings::get_singleton()->get("filesystem/file_server/password");
 		r_flags.push_back("--remote-fs");
 		r_flags.push_back(host + ":" + itos(port));
-		if (passwd != "") {
+		if (!passwd.is_empty()) {
 			r_flags.push_back("--remote-fs-password");
 			r_flags.push_back(passwd);
 		}
@@ -1483,13 +1492,16 @@ void EditorExport::add_export_preset(const Ref<EditorExportPreset> &p_preset, in
 }
 
 String EditorExportPlatform::test_etc2() const {
+	//	String driver = ProjectSettings::get_singleton()->get("rendering/driver/driver_name");
+	//	bool etc_supported = ProjectSettings::get_singleton()->get("rendering/textures/vram_compression/import_etc");
+	//	bool etc2_supported = ProjectSettings::get_singleton()->get("rendering/textures/vram_compression/import_etc2");
 	String driver = ProjectSettings::get_singleton()->get("rendering/driver/driver_name");
 	bool etc_supported = ProjectSettings::get_singleton()->get("rendering/textures/vram_compression/import_etc");
 	bool etc2_supported = ProjectSettings::get_singleton()->get("rendering/textures/vram_compression/import_etc2");
 
-	if (driver == "GLES2" && !etc_supported) {
-		return TTR("Target platform requires 'ETC' texture compression for GLES2. Enable 'Import Etc' in Project Settings.");
-	} else if (driver == "Vulkan" && !etc2_supported) {
+	if (driver == "opengl3" && !etc_supported) {
+		return TTR("Target platform requires 'ETC' texture compression for OpenGL. Enable 'Import Etc' in Project Settings.");
+	} else if (driver == "vulkan" && !etc2_supported) {
 		// FIXME: Review if this is true for Vulkan.
 		return TTR("Target platform requires 'ETC2' texture compression for Vulkan. Enable 'Import Etc 2' in Project Settings.");
 	}
@@ -1500,10 +1512,13 @@ String EditorExportPlatform::test_etc2_or_pvrtc() const {
 	String driver = ProjectSettings::get_singleton()->get("rendering/driver/driver_name");
 	bool etc2_supported = ProjectSettings::get_singleton()->get("rendering/textures/vram_compression/import_etc2");
 	bool pvrtc_supported = ProjectSettings::get_singleton()->get("rendering/textures/vram_compression/import_pvrtc");
+	//	String driver = ProjectSettings::get_singleton()->get("rendering/driver/driver_name");
+	//	bool etc2_supported = ProjectSettings::get_singleton()->get("rendering/textures/vram_compression/import_etc2");
+	//	bool pvrtc_supported = ProjectSettings::get_singleton()->get("rendering/textures/vram_compression/import_pvrtc");
 
-	if (driver == "GLES2" && !pvrtc_supported) {
-		return TTR("Target platform requires 'PVRTC' texture compression for GLES2. Enable 'Import Pvrtc' in Project Settings.");
-	} else if (driver == "Vulkan" && !etc2_supported && !pvrtc_supported) {
+	if (driver == "opengl3" && !pvrtc_supported) {
+		return TTR("Target platform requires 'PVRTC' texture compression for OpenGL. Enable 'Import Pvrtc' in Project Settings.");
+	} else if (driver == "vulkan" && !etc2_supported && !pvrtc_supported) {
 		// FIXME: Review if this is true for Vulkan.
 		return TTR("Target platform requires 'ETC2' or 'PVRTC' texture compression for Vulkan. Enable 'Import Etc 2' or 'Import Pvrtc' in Project Settings.");
 	}
@@ -1520,7 +1535,7 @@ Ref<EditorExportPreset> EditorExport::get_export_preset(int p_idx) {
 }
 
 void EditorExport::remove_export_preset(int p_idx) {
-	export_presets.remove(p_idx);
+	export_presets.remove_at(p_idx);
 	save_presets();
 }
 
@@ -1811,9 +1826,9 @@ bool EditorExportPlatformPC::can_export(const Ref<EditorExportPreset> &p_preset,
 
 List<String> EditorExportPlatformPC::get_binary_extensions(const Ref<EditorExportPreset> &p_preset) const {
 	List<String> list;
-	for (Map<String, String>::Element *E = extensions.front(); E; E = E->next()) {
-		if (p_preset->get(E->key())) {
-			list.push_back(extensions[E->key()]);
+	for (const KeyValue<String, String> &E : extensions) {
+		if (p_preset->get(E.key)) {
+			list.push_back(extensions[E.key]);
 			return list;
 		}
 	}
@@ -1840,7 +1855,7 @@ Error EditorExportPlatformPC::export_project(const Ref<EditorExportPreset> &p_pr
 
 	template_path = template_path.strip_edges();
 
-	if (template_path == String()) {
+	if (template_path.is_empty()) {
 		if (p_preset->get("binary_format/64_bits")) {
 			if (p_debug) {
 				template_path = find_export_template(debug_file_64);
@@ -1856,7 +1871,7 @@ Error EditorExportPlatformPC::export_project(const Ref<EditorExportPreset> &p_pr
 		}
 	}
 
-	if (template_path != String() && !FileAccess::exists(template_path)) {
+	if (!template_path.is_empty() && !FileAccess::exists(template_path)) {
 		EditorNode::get_singleton()->show_warning(TTR("Template file not found:") + "\n" + template_path);
 		return ERR_FILE_NOT_FOUND;
 	}
@@ -1945,7 +1960,7 @@ void EditorExportPlatformPC::set_debug_32(const String &p_file) {
 void EditorExportPlatformPC::get_platform_features(List<String> *r_features) {
 	r_features->push_back("pc"); //all pcs support "pc"
 	r_features->push_back("s3tc"); //all pcs support "s3tc" compression
-	r_features->push_back(get_os_name()); //OS name is a feature
+	r_features->push_back(get_os_name().to_lower()); //OS name is a feature
 }
 
 void EditorExportPlatformPC::resolve_platform_feature_priorities(const Ref<EditorExportPreset> &p_preset, Set<String> &p_features) {

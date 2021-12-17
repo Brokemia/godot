@@ -31,6 +31,9 @@
 #include "graph_node.h"
 
 #include "core/string/translation.h"
+#ifdef TOOLS_ENABLED
+#include "graph_edit.h"
+#endif
 
 struct _MinSizeCache {
 	int min_size;
@@ -400,28 +403,28 @@ void GraphNode::_notification(int p_what) {
 				close_rect = Rect2();
 			}
 
-			for (Map<int, Slot>::Element *E = slot_info.front(); E; E = E->next()) {
-				if (E->key() < 0 || E->key() >= cache_y.size()) {
+			for (const KeyValue<int, Slot> &E : slot_info) {
+				if (E.key < 0 || E.key >= cache_y.size()) {
 					continue;
 				}
-				if (!slot_info.has(E->key())) {
+				if (!slot_info.has(E.key)) {
 					continue;
 				}
-				const Slot &s = slot_info[E->key()];
+				const Slot &s = slot_info[E.key];
 				//left
 				if (s.enable_left) {
 					Ref<Texture2D> p = port;
 					if (s.custom_slot_left.is_valid()) {
 						p = s.custom_slot_left;
 					}
-					p->draw(get_canvas_item(), icofs + Point2(edgeofs, cache_y[E->key()]), s.color_left);
+					p->draw(get_canvas_item(), icofs + Point2(edgeofs, cache_y[E.key]), s.color_left);
 				}
 				if (s.enable_right) {
 					Ref<Texture2D> p = port;
 					if (s.custom_slot_right.is_valid()) {
 						p = s.custom_slot_right;
 					}
-					p->draw(get_canvas_item(), icofs + Point2(get_size().x - edgeofs, cache_y[E->key()]), s.color_right);
+					p->draw(get_canvas_item(), icofs + Point2(get_size().x - edgeofs, cache_y[E.key]), s.color_right);
 				}
 			}
 
@@ -439,7 +442,7 @@ void GraphNode::_notification(int p_what) {
 		case NOTIFICATION_THEME_CHANGED: {
 			_shape();
 
-			minimum_size_changed();
+			update_minimum_size();
 			update();
 		} break;
 	}
@@ -455,8 +458,29 @@ void GraphNode::_shape() {
 	} else {
 		title_buf->set_direction((TextServer::Direction)text_direction);
 	}
-	title_buf->add_string(title, font, font_size, opentype_features, (language != "") ? language : TranslationServer::get_singleton()->get_tool_locale());
+	title_buf->add_string(title, font, font_size, opentype_features, (!language.is_empty()) ? language : TranslationServer::get_singleton()->get_tool_locale());
 }
+
+#ifdef TOOLS_ENABLED
+void GraphNode::_edit_set_position(const Point2 &p_position) {
+	GraphEdit *graph = Object::cast_to<GraphEdit>(get_parent());
+	if (graph) {
+		Point2 offset = (p_position + graph->get_scroll_ofs()) * graph->get_zoom();
+		set_position_offset(offset);
+	}
+	set_position(p_position);
+}
+
+void GraphNode::_validate_property(PropertyInfo &property) const {
+	Control::_validate_property(property);
+	GraphEdit *graph = Object::cast_to<GraphEdit>(get_parent());
+	if (graph) {
+		if (property.name == "rect_position") {
+			property.usage |= PROPERTY_USAGE_READ_ONLY;
+		}
+	}
+}
+#endif
 
 void GraphNode::set_slot(int p_idx, bool p_enable_left, int p_type_left, const Color &p_color_left, bool p_enable_right, int p_type_right, const Color &p_color_right, const Ref<Texture2D> &p_custom_left, const Ref<Texture2D> &p_custom_right) {
 	ERR_FAIL_COND_MSG(p_idx < 0, vformat("Cannot set slot with p_idx (%d) lesser than zero.", p_idx));
@@ -642,7 +666,7 @@ void GraphNode::set_title(const String &p_title) {
 	_shape();
 
 	update();
-	minimum_size_changed();
+	update_minimum_size();
 }
 
 String GraphNode::get_title() const {
@@ -863,15 +887,15 @@ Color GraphNode::get_connection_output_color(int p_idx) {
 	return conn_output_cache[p_idx].color;
 }
 
-void GraphNode::_gui_input(const Ref<InputEvent> &p_ev) {
+void GraphNode::gui_input(const Ref<InputEvent> &p_ev) {
 	ERR_FAIL_COND(p_ev.is_null());
 
 	Ref<InputEventMouseButton> mb = p_ev;
 	if (mb.is_valid()) {
 		ERR_FAIL_COND_MSG(get_parent_control() == nullptr, "GraphNode must be the child of a GraphEdit node.");
 
-		if (mb->is_pressed() && mb->get_button_index() == MOUSE_BUTTON_LEFT) {
-			Vector2 mpos = Vector2(mb->get_position().x, mb->get_position().y);
+		if (mb->is_pressed() && mb->get_button_index() == MouseButton::LEFT) {
+			Vector2 mpos = mb->get_position();
 			if (close_rect.size != Size2() && close_rect.has_point(mpos)) {
 				//send focus to parent
 				get_parent_control()->grab_focus();
@@ -893,7 +917,7 @@ void GraphNode::_gui_input(const Ref<InputEvent> &p_ev) {
 			emit_signal(SNAME("raise_request"));
 		}
 
-		if (!mb->is_pressed() && mb->get_button_index() == MOUSE_BUTTON_LEFT) {
+		if (!mb->is_pressed() && mb->get_button_index() == MouseButton::LEFT) {
 			resizing = false;
 		}
 	}
@@ -945,8 +969,6 @@ void GraphNode::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("clear_opentype_features"), &GraphNode::clear_opentype_features);
 	ClassDB::bind_method(D_METHOD("set_language", "language"), &GraphNode::set_language);
 	ClassDB::bind_method(D_METHOD("get_language"), &GraphNode::get_language);
-
-	ClassDB::bind_method(D_METHOD("_gui_input"), &GraphNode::_gui_input);
 
 	ClassDB::bind_method(D_METHOD("set_slot", "idx", "enable_left", "type_left", "color_left", "enable_right", "type_right", "color_right", "custom_left", "custom_right"), &GraphNode::set_slot, DEFVAL(Ref<Texture2D>()), DEFVAL(Ref<Texture2D>()));
 	ClassDB::bind_method(D_METHOD("clear_slot", "idx"), &GraphNode::clear_slot);

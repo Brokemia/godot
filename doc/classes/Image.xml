@@ -9,7 +9,7 @@
 		[b]Note:[/b] The maximum image size is 16384×16384 pixels due to graphics hardware limitations. Larger images may fail to import.
 	</description>
 	<tutorials>
-		<link title="Importing images">https://docs.godotengine.org/en/latest/getting_started/workflow/assets/importing_images.html</link>
+		<link title="Importing images">$DOCS_URL/tutorials/assets_pipeline/importing_images.html</link>
 	</tutorials>
 	<methods>
 		<method name="adjust_bcs">
@@ -154,7 +154,15 @@
 			<return type="void" />
 			<argument index="0" name="color" type="Color" />
 			<description>
-				Fills the image with a given [Color].
+				Fills the image with [code]color[/code].
+			</description>
+		</method>
+		<method name="fill_rect">
+			<return type="void" />
+			<argument index="0" name="rect" type="Rect2" />
+			<argument index="1" name="color" type="Color" />
+			<description>
+				Fills [code]rect[/code] with [code]color[/code].
 			</description>
 		</method>
 		<method name="fix_alpha_edges">
@@ -180,6 +188,7 @@
 			<argument index="0" name="renormalize" type="bool" default="false" />
 			<description>
 				Generates mipmaps for the image. Mipmaps are precalculated lower-resolution copies of the image that are automatically used if the image needs to be scaled down when rendered. They help improve image quality and performance when rendering. This method returns an error if the image is compressed, in a custom format, or if the image's width/height is [code]0[/code].
+				[b]Note:[/b] Mipmap generation is done on the CPU, is single-threaded and is [i]always[/i] done on the main thread. This means generating mipmaps will result in noticeable stuttering during gameplay, even if [method generate_mipmaps] is called from a [Thread].
 			</description>
 		</method>
 		<method name="get_data" qualifiers="const">
@@ -277,7 +286,7 @@
 			<return type="int" enum="Error" />
 			<argument index="0" name="path" type="String" />
 			<description>
-				Loads an image from file [code]path[/code]. See [url=https://docs.godotengine.org/en/latest/getting_started/workflow/assets/importing_images.html#supported-image-formats]Supported image formats[/url] for a list of supported image formats and limitations.
+				Loads an image from file [code]path[/code]. See [url=$DOCS_URL/tutorials/assets_pipeline/importing_images.html#supported-image-formats]Supported image formats[/url] for a list of supported image formats and limitations.
 				[b]Warning:[/b] This method should only be used in the editor or in cases when you need to load external images at run-time, such as images located at the [code]user://[/code] directory, and may not work in exported projects.
 				See also [ImageTexture] description for usage examples.
 			</description>

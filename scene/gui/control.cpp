@@ -30,6 +30,7 @@
 
 #include "control.h"
 
+#include "container.h"
 #include "core/config/project_settings.h"
 #include "core/math/geometry_2d.h"
 #include "core/object/message_queue.h"
@@ -37,7 +38,6 @@
 #include "core/os/os.h"
 #include "core/string/print_string.h"
 #include "core/string/translation.h"
-
 #include "scene/gui/label.h"
 #include "scene/gui/panel.h"
 #include "scene/main/canvas_layer.h"
@@ -47,7 +47,6 @@
 #include "servers/text_server.h"
 
 #ifdef TOOLS_ENABLED
-#include "editor/editor_settings.h"
 #include "editor/plugins/canvas_item_editor_plugin.h"
 #endif
 
@@ -74,8 +73,8 @@ Dictionary Control::_edit_get_state() const {
 
 void Control::_edit_set_state(const Dictionary &p_state) {
 	ERR_FAIL_COND((p_state.size() <= 0) ||
-				  !p_state.has("rotation") || !p_state.has("scale") ||
-				  !p_state.has("pivot") || !p_state.has("anchors") || !p_state.has("offsets"));
+			!p_state.has("rotation") || !p_state.has("scale") ||
+			!p_state.has("pivot") || !p_state.has("anchors") || !p_state.has("offsets"));
 	Dictionary state = p_state;
 
 	set_rotation(state["rotation"]);
@@ -168,6 +167,20 @@ Size2 Control::_edit_get_minimum_size() const {
 }
 #endif
 
+String Control::properties_managed_by_container[] = {
+	"offset_left",
+	"offset_top",
+	"offset_right",
+	"offset_bottom",
+	"anchor_left",
+	"anchor_top",
+	"anchor_right",
+	"anchor_bottom",
+	"rect_position",
+	"rect_scale",
+	"rect_size"
+};
+
 void Control::accept_event() {
 	if (is_inside_tree()) {
 		get_viewport()->_gui_accept_event();
@@ -179,7 +192,7 @@ void Control::set_custom_minimum_size(const Size2 &p_custom) {
 		return;
 	}
 	data.custom_minimum_size = p_custom;
-	minimum_size_changed();
+	update_minimum_size();
 }
 
 Size2 Control::get_custom_minimum_size() const {
@@ -200,7 +213,7 @@ void Control::_update_minimum_size_cache() {
 	data.minimum_size_valid = true;
 
 	if (size_changed) {
-		minimum_size_changed();
+		update_minimum_size();
 	}
 }
 
@@ -387,7 +400,7 @@ void Control::_get_property_list(List<PropertyInfo> *p_list) const {
 				usage |= PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_CHECKED;
 			}
 
-			p_list->push_back(PropertyInfo(Variant::INT, "theme_override_font_sizes/" + E, PROPERTY_HINT_NONE, "", usage));
+			p_list->push_back(PropertyInfo(Variant::INT, "theme_override_font_sizes/" + E, PROPERTY_HINT_RANGE, "1,256,1,or_greater", usage));
 		}
 	}
 	{
@@ -441,6 +454,20 @@ void Control::_validate_property(PropertyInfo &property) const {
 		}
 
 		property.hint_string = hint_string;
+	}
+	if (!Object::cast_to<Container>(get_parent())) {
+		return;
+	}
+	// Disable the property if it's managed by the parent container.
+	bool property_is_managed_by_container = false;
+	for (unsigned i = 0; i < properties_managed_by_container_count; i++) {
+		property_is_managed_by_container = properties_managed_by_container[i] == property.name;
+		if (property_is_managed_by_container) {
+			break;
+		}
+	}
+	if (property_is_managed_by_container) {
+		property.usage |= PROPERTY_USAGE_READ_ONLY;
 	}
 }
 
@@ -610,7 +637,9 @@ void Control::_notification(int p_notification) {
 				}
 			} else {
 				//is a regular root control or top_level
-				data.RI = get_viewport()->_gui_add_root_control(this);
+				Viewport *viewport = get_viewport();
+				ERR_FAIL_COND(!viewport);
+				data.RI = viewport->_gui_add_root_control(this);
 			}
 
 			data.parent_canvas_item = get_parent_item();
@@ -619,7 +648,9 @@ void Control::_notification(int p_notification) {
 				data.parent_canvas_item->connect("item_rect_changed", callable_mp(this, &Control::_size_changed));
 			} else {
 				//connect viewport
-				get_viewport()->connect("size_changed", callable_mp(this, &Control::_size_changed));
+				Viewport *viewport = get_viewport();
+				ERR_FAIL_COND(!viewport);
+				viewport->connect("size_changed", callable_mp(this, &Control::_size_changed));
 			}
 		} break;
 		case NOTIFICATION_EXIT_CANVAS: {
@@ -628,7 +659,9 @@ void Control::_notification(int p_notification) {
 				data.parent_canvas_item = nullptr;
 			} else if (!is_set_as_top_level()) {
 				//disconnect viewport
-				get_viewport()->disconnect("size_changed", callable_mp(this, &Control::_size_changed));
+				Viewport *viewport = get_viewport();
+				ERR_FAIL_COND(!viewport);
+				viewport->disconnect("size_changed", callable_mp(this, &Control::_size_changed));
 			}
 
 			if (data.RI) {
@@ -680,7 +713,7 @@ void Control::_notification(int p_notification) {
 			update();
 		} break;
 		case NOTIFICATION_THEME_CHANGED: {
-			minimum_size_changed();
+			update_minimum_size();
 			update();
 		} break;
 		case NOTIFICATION_VISIBILITY_CHANGED: {
@@ -713,7 +746,7 @@ bool Control::has_point(const Point2 &p_point) const {
 	return Rect2(Point2(), get_size()).has_point(p_point);
 }
 
-void Control::set_drag_forwarding(Control *p_target) {
+void Control::set_drag_forwarding(Object *p_target) {
 	if (p_target) {
 		data.drag_owner = p_target->get_instance_id();
 	} else {
@@ -725,19 +758,13 @@ Variant Control::get_drag_data(const Point2 &p_point) {
 	if (data.drag_owner.is_valid()) {
 		Object *obj = ObjectDB::get_instance(data.drag_owner);
 		if (obj) {
-			Control *c = Object::cast_to<Control>(obj);
-			return c->call("_get_drag_data_fw", p_point, this);
+			return obj->call("_get_drag_data_fw", p_point, this);
 		}
 	}
 
-	if (get_script_instance()) {
-		Variant v = p_point;
-		const Variant *p = &v;
-		Callable::CallError ce;
-		Variant ret = get_script_instance()->call(SceneStringNames::get_singleton()->_get_drag_data, &p, 1, ce);
-		if (ce.error == Callable::CallError::CALL_OK) {
-			return ret;
-		}
+	Variant dd;
+	if (GDVIRTUAL_CALL(_get_drag_data, p_point, dd)) {
+		return dd;
 	}
 
 	return Variant();
@@ -747,21 +774,14 @@ bool Control::can_drop_data(const Point2 &p_point, const Variant &p_data) const 
 	if (data.drag_owner.is_valid()) {
 		Object *obj = ObjectDB::get_instance(data.drag_owner);
 		if (obj) {
-			Control *c = Object::cast_to<Control>(obj);
-			return c->call("_can_drop_data_fw", p_point, p_data, this);
+			return obj->call("_can_drop_data_fw", p_point, p_data, this);
 		}
 	}
 
-	if (get_script_instance()) {
-		Variant v = p_point;
-		const Variant *p[2] = { &v, &p_data };
-		Callable::CallError ce;
-		Variant ret = get_script_instance()->call(SceneStringNames::get_singleton()->_can_drop_data, p, 2, ce);
-		if (ce.error == Callable::CallError::CALL_OK) {
-			return ret;
-		}
+	bool ret;
+	if (GDVIRTUAL_CALL(_can_drop_data, p_point, p_data, ret)) {
+		return ret;
 	}
-
 	return false;
 }
 
@@ -769,21 +789,12 @@ void Control::drop_data(const Point2 &p_point, const Variant &p_data) {
 	if (data.drag_owner.is_valid()) {
 		Object *obj = ObjectDB::get_instance(data.drag_owner);
 		if (obj) {
-			Control *c = Object::cast_to<Control>(obj);
-			c->call("_drop_data_fw", p_point, p_data, this);
+			obj->call("_drop_data_fw", p_point, p_data, this);
 			return;
 		}
 	}
 
-	if (get_script_instance()) {
-		Variant v = p_point;
-		const Variant *p[2] = { &v, &p_data };
-		Callable::CallError ce;
-		Variant ret = get_script_instance()->call(SceneStringNames::get_singleton()->_drop_data, p, 2, ce);
-		if (ce.error == Callable::CallError::CALL_OK) {
-			return;
-		}
-	}
+	GDVIRTUAL_CALL(_drop_data, p_point, p_data);
 }
 
 void Control::force_drag(const Variant &p_data, Control *p_control) {
@@ -799,16 +810,30 @@ void Control::set_drag_preview(Control *p_control) {
 	get_viewport()->_gui_set_drag_preview(this, p_control);
 }
 
-Size2 Control::get_minimum_size() const {
-	ScriptInstance *si = const_cast<Control *>(this)->get_script_instance();
-	if (si) {
-		Callable::CallError ce;
-		Variant s = si->call(SceneStringNames::get_singleton()->_get_minimum_size, nullptr, 0, ce);
-		if (ce.error == Callable::CallError::CALL_OK) {
-			return s;
-		}
+bool Control::is_drag_successful() const {
+	return is_inside_tree() && get_viewport()->gui_is_drag_successful();
+}
+
+void Control::_call_gui_input(const Ref<InputEvent> &p_event) {
+	emit_signal(SceneStringNames::get_singleton()->gui_input, p_event); //signal should be first, so it's possible to override an event (and then accept it)
+	if (!is_inside_tree() || get_viewport()->is_input_handled()) {
+		return; //input was handled, abort
 	}
-	return Size2();
+	GDVIRTUAL_CALL(_gui_input, p_event);
+	if (!is_inside_tree() || get_viewport()->is_input_handled()) {
+		return; //input was handled, abort
+	}
+	gui_input(p_event);
+}
+void Control::gui_input(const Ref<InputEvent> &p_event) {
+}
+
+Size2 Control::get_minimum_size() const {
+	Vector2 ms;
+	if (GDVIRTUAL_CALL(_get_minimum_size, ms)) {
+		return ms;
+	}
+	return Vector2();
 }
 
 template <class T>
@@ -816,11 +841,12 @@ T Control::get_theme_item_in_types(Control *p_theme_owner, Window *p_theme_owner
 	ERR_FAIL_COND_V_MSG(p_theme_types.size() == 0, T(), "At least one theme type must be specified.");
 
 	// First, look through each control or window node in the branch, until no valid parent can be found.
-	// For each control iterate through its inheritance chain and see if p_name exists in any of them.
+	// Only nodes with a theme resource attached are considered.
 	Control *theme_owner = p_theme_owner;
 	Window *theme_owner_window = p_theme_owner_window;
 
 	while (theme_owner || theme_owner_window) {
+		// For each theme resource check the theme types provided and see if p_name exists with any of them.
 		for (const StringName &E : p_theme_types) {
 			if (theme_owner && theme_owner->data.theme->has_theme_item(p_data_type, p_name, E)) {
 				return theme_owner->data.theme->get_theme_item(p_data_type, p_name, E);
@@ -871,11 +897,12 @@ bool Control::has_theme_item_in_types(Control *p_theme_owner, Window *p_theme_ow
 	ERR_FAIL_COND_V_MSG(p_theme_types.size() == 0, false, "At least one theme type must be specified.");
 
 	// First, look through each control or window node in the branch, until no valid parent can be found.
-	// For each control iterate through its inheritance chain and see if p_name exists in any of them.
+	// Only nodes with a theme resource attached are considered.
 	Control *theme_owner = p_theme_owner;
 	Window *theme_owner_window = p_theme_owner_window;
 
 	while (theme_owner || theme_owner_window) {
+		// For each theme resource check the theme types provided and see if p_name exists with any of them.
 		for (const StringName &E : p_theme_types) {
 			if (theme_owner && theme_owner->data.theme->has_theme_item(p_data_type, p_name, E)) {
 				return true;
@@ -962,7 +989,7 @@ Ref<StyleBox> Control::get_theme_stylebox(const StringName &p_name, const String
 Ref<Font> Control::get_theme_font(const StringName &p_name, const StringName &p_theme_type) const {
 	if (p_theme_type == StringName() || p_theme_type == get_class_name() || p_theme_type == data.theme_type_variation) {
 		const Ref<Font> *font = data.font_override.getptr(p_name);
-		if (font) {
+		if (font && (*font)->get_data_count() > 0) {
 			return *font;
 		}
 	}
@@ -975,7 +1002,7 @@ Ref<Font> Control::get_theme_font(const StringName &p_name, const StringName &p_
 int Control::get_theme_font_size(const StringName &p_name, const StringName &p_theme_type) const {
 	if (p_theme_type == StringName() || p_theme_type == get_class_name() || p_theme_type == data.theme_type_variation) {
 		const int *font_size = data.font_size_override.getptr(p_name);
-		if (font_size) {
+		if (font_size && (*font_size) > 0) {
 			return *font_size;
 		}
 	}
@@ -1111,6 +1138,150 @@ bool Control::has_theme_constant(const StringName &p_name, const StringName &p_t
 	List<StringName> theme_types;
 	_get_theme_type_dependencies(p_theme_type, &theme_types);
 	return has_theme_item_in_types(data.theme_owner, data.theme_owner_window, Theme::DATA_TYPE_CONSTANT, p_name, theme_types);
+}
+
+float Control::fetch_theme_default_base_scale(Control *p_theme_owner, Window *p_theme_owner_window) {
+	// First, look through each control or window node in the branch, until no valid parent can be found.
+	// Only nodes with a theme resource attached are considered.
+	// For each theme resource see if their assigned theme has the default value defined and valid.
+	Control *theme_owner = p_theme_owner;
+	Window *theme_owner_window = p_theme_owner_window;
+
+	while (theme_owner || theme_owner_window) {
+		if (theme_owner && theme_owner->data.theme->has_default_theme_base_scale()) {
+			return theme_owner->data.theme->get_default_theme_base_scale();
+		}
+
+		if (theme_owner_window && theme_owner_window->theme->has_default_theme_base_scale()) {
+			return theme_owner_window->theme->get_default_theme_base_scale();
+		}
+
+		Node *parent = theme_owner ? theme_owner->get_parent() : theme_owner_window->get_parent();
+		Control *parent_c = Object::cast_to<Control>(parent);
+		if (parent_c) {
+			theme_owner = parent_c->data.theme_owner;
+			theme_owner_window = parent_c->data.theme_owner_window;
+		} else {
+			Window *parent_w = Object::cast_to<Window>(parent);
+			if (parent_w) {
+				theme_owner = parent_w->theme_owner;
+				theme_owner_window = parent_w->theme_owner_window;
+			} else {
+				theme_owner = nullptr;
+				theme_owner_window = nullptr;
+			}
+		}
+	}
+
+	// Secondly, check the project-defined Theme resource.
+	if (Theme::get_project_default().is_valid()) {
+		if (Theme::get_project_default()->has_default_theme_base_scale()) {
+			return Theme::get_project_default()->get_default_theme_base_scale();
+		}
+	}
+
+	// Lastly, fall back on the default Theme.
+	return Theme::get_default()->get_default_theme_base_scale();
+}
+
+float Control::get_theme_default_base_scale() const {
+	return fetch_theme_default_base_scale(data.theme_owner, data.theme_owner_window);
+}
+
+Ref<Font> Control::fetch_theme_default_font(Control *p_theme_owner, Window *p_theme_owner_window) {
+	// First, look through each control or window node in the branch, until no valid parent can be found.
+	// Only nodes with a theme resource attached are considered.
+	// For each theme resource see if their assigned theme has the default value defined and valid.
+	Control *theme_owner = p_theme_owner;
+	Window *theme_owner_window = p_theme_owner_window;
+
+	while (theme_owner || theme_owner_window) {
+		if (theme_owner && theme_owner->data.theme->has_default_theme_font()) {
+			return theme_owner->data.theme->get_default_theme_font();
+		}
+
+		if (theme_owner_window && theme_owner_window->theme->has_default_theme_font()) {
+			return theme_owner_window->theme->get_default_theme_font();
+		}
+
+		Node *parent = theme_owner ? theme_owner->get_parent() : theme_owner_window->get_parent();
+		Control *parent_c = Object::cast_to<Control>(parent);
+		if (parent_c) {
+			theme_owner = parent_c->data.theme_owner;
+			theme_owner_window = parent_c->data.theme_owner_window;
+		} else {
+			Window *parent_w = Object::cast_to<Window>(parent);
+			if (parent_w) {
+				theme_owner = parent_w->theme_owner;
+				theme_owner_window = parent_w->theme_owner_window;
+			} else {
+				theme_owner = nullptr;
+				theme_owner_window = nullptr;
+			}
+		}
+	}
+
+	// Secondly, check the project-defined Theme resource.
+	if (Theme::get_project_default().is_valid()) {
+		if (Theme::get_project_default()->has_default_theme_font()) {
+			return Theme::get_project_default()->get_default_theme_font();
+		}
+	}
+
+	// Lastly, fall back on the default Theme.
+	return Theme::get_default()->get_default_theme_font();
+}
+
+Ref<Font> Control::get_theme_default_font() const {
+	return fetch_theme_default_font(data.theme_owner, data.theme_owner_window);
+}
+
+int Control::fetch_theme_default_font_size(Control *p_theme_owner, Window *p_theme_owner_window) {
+	// First, look through each control or window node in the branch, until no valid parent can be found.
+	// Only nodes with a theme resource attached are considered.
+	// For each theme resource see if their assigned theme has the default value defined and valid.
+	Control *theme_owner = p_theme_owner;
+	Window *theme_owner_window = p_theme_owner_window;
+
+	while (theme_owner || theme_owner_window) {
+		if (theme_owner && theme_owner->data.theme->has_default_theme_font_size()) {
+			return theme_owner->data.theme->get_default_theme_font_size();
+		}
+
+		if (theme_owner_window && theme_owner_window->theme->has_default_theme_font_size()) {
+			return theme_owner_window->theme->get_default_theme_font_size();
+		}
+
+		Node *parent = theme_owner ? theme_owner->get_parent() : theme_owner_window->get_parent();
+		Control *parent_c = Object::cast_to<Control>(parent);
+		if (parent_c) {
+			theme_owner = parent_c->data.theme_owner;
+			theme_owner_window = parent_c->data.theme_owner_window;
+		} else {
+			Window *parent_w = Object::cast_to<Window>(parent);
+			if (parent_w) {
+				theme_owner = parent_w->theme_owner;
+				theme_owner_window = parent_w->theme_owner_window;
+			} else {
+				theme_owner = nullptr;
+				theme_owner_window = nullptr;
+			}
+		}
+	}
+
+	// Secondly, check the project-defined Theme resource.
+	if (Theme::get_project_default().is_valid()) {
+		if (Theme::get_project_default()->has_default_theme_font_size()) {
+			return Theme::get_project_default()->get_default_theme_font_size();
+		}
+	}
+
+	// Lastly, fall back on the default Theme.
+	return Theme::get_default()->get_default_theme_font_size();
+}
+
+int Control::get_theme_default_font_size() const {
+	return fetch_theme_default_font_size(data.theme_owner, data.theme_owner_window);
 }
 
 Rect2 Control::get_parent_anchorable_rect() const {
@@ -1654,6 +1825,10 @@ Size2 Control::get_size() const {
 	return data.size_cache;
 }
 
+void Control::reset_size() {
+	set_size(Size2());
+}
+
 Rect2 Control::get_global_rect() const {
 	return Rect2(get_global_position(), get_size());
 }
@@ -2123,8 +2298,9 @@ String Control::get_tooltip(const Point2 &p_pos) const {
 }
 
 Control *Control::make_custom_tooltip(const String &p_text) const {
-	if (get_script_instance()) {
-		return const_cast<Control *>(this)->call("_make_custom_tooltip", p_text);
+	Object *ret = nullptr;
+	if (GDVIRTUAL_CALL(_make_custom_tooltip, p_text, ret)) {
+		return Object::cast_to<Control>(ret);
 	}
 	return nullptr;
 }
@@ -2358,7 +2534,7 @@ void Control::grab_click_focus() {
 	get_viewport()->_gui_grab_click_focus(this);
 }
 
-void Control::minimum_size_changed() {
+void Control::update_minimum_size() {
 	if (!is_inside_tree() || data.block_minimum_size_adjust) {
 		return;
 	}
@@ -2418,21 +2594,11 @@ void Control::warp_mouse(const Point2 &p_to_pos) {
 }
 
 bool Control::is_text_field() const {
-	/*
-    if (get_script_instance()) {
-        Variant v=p_point;
-        const Variant *p[2]={&v,&p_data};
-        Callable::CallError ce;
-        Variant ret = get_script_instance()->call("is_text_field",p,2,ce);
-        if (ce.error==Callable::CallError::CALL_OK)
-            return ret;
-    }
-  */
 	return false;
 }
 
-Vector<Vector2i> Control::structured_text_parser(StructuredTextParser p_theme_type, const Array &p_args, const String p_text) const {
-	Vector<Vector2i> ret;
+Array Control::structured_text_parser(StructuredTextParser p_theme_type, const Array &p_args, const String &p_text) const {
+	Array ret;
 	switch (p_theme_type) {
 		case STRUCTURED_TEXT_URI: {
 			int prev = 0;
@@ -2499,14 +2665,11 @@ Vector<Vector2i> Control::structured_text_parser(StructuredTextParser p_theme_ty
 			}
 		} break;
 		case STRUCTURED_TEXT_CUSTOM: {
-			if (get_script_instance()) {
-				Variant data = get_script_instance()->call(SceneStringNames::get_singleton()->_structured_text_parser, p_args, p_text);
-				if (data.get_type() == Variant::ARRAY) {
-					Array _data = data;
-					for (int i = 0; i < _data.size(); i++) {
-						if (_data[i].get_type() == Variant::VECTOR2I) {
-							ret.push_back(Vector2i(_data[i]));
-						}
+			Array r;
+			if (GDVIRTUAL_CALL(_structured_text_parser, p_args, p_text, r)) {
+				for (int i = 0; i < r.size(); i++) {
+					if (r[i].get_type() == Variant::VECTOR2I) {
+						ret.push_back(Vector2i(r[i]));
 					}
 				}
 			}
@@ -2533,7 +2696,7 @@ real_t Control::get_rotation() const {
 void Control::_override_changed() {
 	notification(NOTIFICATION_THEME_CHANGED);
 	emit_signal(SceneStringNames::get_singleton()->theme_changed);
-	minimum_size_changed(); // overrides are likely to affect minimum size
+	update_minimum_size(); // Overrides are likely to affect minimum size.
 }
 
 void Control::set_pivot_offset(const Vector2 &p_pivot) {
@@ -2601,12 +2764,6 @@ bool Control::is_visibility_clip_disabled() const {
 }
 
 void Control::get_argument_options(const StringName &p_function, int p_idx, List<String> *r_options) const {
-#ifdef TOOLS_ENABLED
-	const String quote_style = EDITOR_GET("text_editor/completion/use_single_quotes") ? "'" : "\"";
-#else
-	const String quote_style = "\"";
-#endif
-
 	Node::get_argument_options(p_function, p_idx, r_options);
 
 	if (p_idx == 0) {
@@ -2626,7 +2783,7 @@ void Control::get_argument_options(const StringName &p_function, int p_idx, List
 
 		sn.sort_custom<StringName::AlphCompare>();
 		for (const StringName &name : sn) {
-			r_options->push_back(String(name).quote(quote_style));
+			r_options->push_back(String(name).quote());
 		}
 	}
 }
@@ -2634,7 +2791,7 @@ void Control::get_argument_options(const StringName &p_function, int p_idx, List
 TypedArray<String> Control::get_configuration_warnings() const {
 	TypedArray<String> warnings = Node::get_configuration_warnings();
 
-	if (data.mouse_filter == MOUSE_FILTER_IGNORE && data.tooltip != "") {
+	if (data.mouse_filter == MOUSE_FILTER_IGNORE && !data.tooltip.is_empty()) {
 		warnings.push_back(TTR("The Hint Tooltip won't be displayed as the control's Mouse Filter is set to \"Ignore\". To solve this, set the Mouse Filter to \"Stop\" or \"Pass\"."));
 	}
 
@@ -2692,6 +2849,7 @@ void Control::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_position", "position", "keep_offsets"), &Control::set_position, DEFVAL(false));
 	ClassDB::bind_method(D_METHOD("_set_position", "position"), &Control::_set_position);
 	ClassDB::bind_method(D_METHOD("set_size", "size", "keep_offsets"), &Control::set_size, DEFVAL(false));
+	ClassDB::bind_method(D_METHOD("reset_size"), &Control::reset_size);
 	ClassDB::bind_method(D_METHOD("_set_size", "size"), &Control::_set_size);
 	ClassDB::bind_method(D_METHOD("set_custom_minimum_size", "size"), &Control::set_custom_minimum_size);
 	ClassDB::bind_method(D_METHOD("set_global_position", "position", "keep_offsets"), &Control::set_global_position, DEFVAL(false));
@@ -2774,6 +2932,10 @@ void Control::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("has_theme_color", "name", "theme_type"), &Control::has_theme_color, DEFVAL(""));
 	ClassDB::bind_method(D_METHOD("has_theme_constant", "name", "theme_type"), &Control::has_theme_constant, DEFVAL(""));
 
+	ClassDB::bind_method(D_METHOD("get_theme_default_base_scale"), &Control::get_theme_default_base_scale);
+	ClassDB::bind_method(D_METHOD("get_theme_default_font"), &Control::get_theme_default_font);
+	ClassDB::bind_method(D_METHOD("get_theme_default_font_size"), &Control::get_theme_default_font_size);
+
 	ClassDB::bind_method(D_METHOD("get_parent_control"), &Control::get_parent_control);
 
 	ClassDB::bind_method(D_METHOD("set_h_grow_direction", "direction"), &Control::set_h_grow_direction);
@@ -2811,10 +2973,11 @@ void Control::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_drag_forwarding", "target"), &Control::set_drag_forwarding);
 	ClassDB::bind_method(D_METHOD("set_drag_preview", "control"), &Control::set_drag_preview);
+	ClassDB::bind_method(D_METHOD("is_drag_successful"), &Control::is_drag_successful);
 
 	ClassDB::bind_method(D_METHOD("warp_mouse", "to_position"), &Control::warp_mouse);
 
-	ClassDB::bind_method(D_METHOD("minimum_size_changed"), &Control::minimum_size_changed);
+	ClassDB::bind_method(D_METHOD("update_minimum_size"), &Control::update_minimum_size);
 
 	ClassDB::bind_method(D_METHOD("set_layout_direction", "direction"), &Control::set_layout_direction);
 	ClassDB::bind_method(D_METHOD("get_layout_direction"), &Control::get_layout_direction);
@@ -2822,21 +2985,6 @@ void Control::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_auto_translate", "enable"), &Control::set_auto_translate);
 	ClassDB::bind_method(D_METHOD("is_auto_translating"), &Control::is_auto_translating);
-
-	BIND_VMETHOD(MethodInfo("_structured_text_parser", PropertyInfo(Variant::ARRAY, "args"), PropertyInfo(Variant::STRING, "text")));
-
-	BIND_VMETHOD(MethodInfo("_gui_input", PropertyInfo(Variant::OBJECT, "event", PROPERTY_HINT_RESOURCE_TYPE, "InputEvent")));
-	BIND_VMETHOD(MethodInfo(Variant::VECTOR2, "_get_minimum_size"));
-
-	MethodInfo get_drag_data = MethodInfo("_get_drag_data", PropertyInfo(Variant::VECTOR2, "position"));
-	get_drag_data.return_val.usage |= PROPERTY_USAGE_NIL_IS_VARIANT;
-	BIND_VMETHOD(get_drag_data);
-
-	BIND_VMETHOD(MethodInfo(Variant::BOOL, "_can_drop_data", PropertyInfo(Variant::VECTOR2, "position"), PropertyInfo(Variant::NIL, "data")));
-	BIND_VMETHOD(MethodInfo("_drop_data", PropertyInfo(Variant::VECTOR2, "position"), PropertyInfo(Variant::NIL, "data")));
-	BIND_VMETHOD(MethodInfo(
-			PropertyInfo(Variant::OBJECT, "control", PROPERTY_HINT_RESOURCE_TYPE, "Control"),
-			"_make_custom_tooltip", PropertyInfo(Variant::STRING, "for_text")));
 
 	ADD_GROUP("Anchor", "anchor_");
 	ADD_PROPERTYI(PropertyInfo(Variant::FLOAT, "anchor_left", PROPERTY_HINT_RANGE, "0,1,0.001,or_lesser,or_greater"), "_set_anchor", "get_anchor", SIDE_LEFT);
@@ -2994,5 +3142,14 @@ void Control::_bind_methods() {
 	ADD_SIGNAL(MethodInfo("minimum_size_changed"));
 	ADD_SIGNAL(MethodInfo("theme_changed"));
 
-	GDVIRTUAL_BIND(_has_point);
+	GDVIRTUAL_BIND(_has_point, "position");
+	GDVIRTUAL_BIND(_structured_text_parser, "args", "text");
+	GDVIRTUAL_BIND(_get_minimum_size);
+
+	GDVIRTUAL_BIND(_get_drag_data, "at_position");
+	GDVIRTUAL_BIND(_can_drop_data, "at_position", "data");
+	GDVIRTUAL_BIND(_drop_data, "at_position", "data");
+	GDVIRTUAL_BIND(_make_custom_tooltip, "for_text");
+
+	GDVIRTUAL_BIND(_gui_input, "event");
 }

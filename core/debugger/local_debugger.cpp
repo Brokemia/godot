@@ -139,7 +139,7 @@ void LocalDebugger::debug(bool p_can_continue, bool p_is_error_breakpoint) {
 		// Cache options
 		String variable_prefix = options["variable_prefix"];
 
-		if (line == "") {
+		if (line.is_empty()) {
 			print_line("\nDebugger Break, Reason: '" + script_lang->debug_get_error() + "'");
 			print_line("*Frame " + itos(current_frame) + " - " + script_lang->debug_get_stack_level_source(current_frame) + ":" + itos(script_lang->debug_get_stack_level_line(current_frame)) + " in function '" + script_lang->debug_get_stack_level_function(current_frame) + "'");
 			print_line("Enter \"help\" for assistance.");
@@ -166,8 +166,8 @@ void LocalDebugger::debug(bool p_can_continue, bool p_is_error_breakpoint) {
 
 		} else if (line.begins_with("set")) {
 			if (line.get_slice_count(" ") == 1) {
-				for (Map<String, String>::Element *E = options.front(); E; E = E->next()) {
-					print_line("\t" + E->key() + "=" + E->value());
+				for (const KeyValue<String, String> &E : options) {
+					print_line("\t" + E.key + "=" + E.value);
 				}
 
 			} else {
@@ -249,8 +249,8 @@ void LocalDebugger::debug(bool p_can_continue, bool p_is_error_breakpoint) {
 				}
 
 				print_line("Breakpoint(s): " + itos(breakpoints.size()));
-				for (Map<int, Set<StringName>>::Element *E = breakpoints.front(); E; E = E->next()) {
-					print_line("\t" + String(E->value().front()->get()) + ":" + itos(E->key()));
+				for (const KeyValue<int, Set<StringName>> &E : breakpoints) {
+					print_line("\t" + String(E.value.front()->get()) + ":" + itos(E.key));
 				}
 
 			} else {
@@ -358,7 +358,7 @@ void LocalDebugger::send_message(const String &p_message, const Array &p_args) {
 	// print_line("MESSAGE: '" + p_message + "' - " + String(Variant(p_args)));
 }
 
-void LocalDebugger::send_error(const String &p_func, const String &p_file, int p_line, const String &p_err, const String &p_descr, ErrorHandlerType p_type) {
+void LocalDebugger::send_error(const String &p_func, const String &p_file, int p_line, const String &p_err, const String &p_descr, bool p_editor_notify, ErrorHandlerType p_type) {
 	print_line("ERROR: '" + (p_descr.is_empty() ? p_err : p_descr) + "'");
 }
 

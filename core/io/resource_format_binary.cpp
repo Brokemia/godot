@@ -335,7 +335,7 @@ Error ResourceLoaderBinary::parse_variant(Variant &r_v) {
 					String exttype = get_unicode_string();
 					String path = get_unicode_string();
 
-					if (path.find("://") == -1 && path.is_rel_path()) {
+					if (path.find("://") == -1 && path.is_relative_path()) {
 						// path is relative to file being loaded, so convert to a resource path
 						path = ProjectSettings::get_singleton()->localize_path(res_path.get_base_dir().plus_file(path));
 					}
@@ -626,7 +626,7 @@ Error ResourceLoaderBinary::load() {
 			path = remaps[path];
 		}
 
-		if (path.find("://") == -1 && path.is_rel_path()) {
+		if (path.find("://") == -1 && path.is_relative_path()) {
 			// path is relative to file being loaded, so convert to a resource path
 			path = ProjectSettings::get_singleton()->localize_path(path.get_base_dir().plus_file(external_resources[i].path));
 		}
@@ -727,7 +727,7 @@ Error ResourceLoaderBinary::load() {
 			}
 
 			res = RES(r);
-			if (path != String() && cache_mode != ResourceFormatLoader::CACHE_MODE_IGNORE) {
+			if (!path.is_empty() && cache_mode != ResourceFormatLoader::CACHE_MODE_IGNORE) {
 				r->set_path(path, cache_mode == ResourceFormatLoader::CACHE_MODE_REPLACE); //if got here because the resource with same path has different type, replace it
 			}
 			r->set_scene_unique_id(id);
@@ -829,7 +829,7 @@ void ResourceLoaderBinary::get_dependencies(FileAccess *p_f, List<String> *p_dep
 			dep = external_resources[i].path;
 		}
 
-		if (p_add_types && external_resources[i].type != String()) {
+		if (p_add_types && !external_resources[i].type.is_empty()) {
 			dep += "::" + external_resources[i].type;
 		}
 
@@ -1026,7 +1026,7 @@ RES ResourceFormatLoaderBinary::load(const String &p_path, const String &p_origi
 	loader.cache_mode = p_cache_mode;
 	loader.use_sub_threads = p_use_sub_threads;
 	loader.progress = r_progress;
-	String path = p_original_path != "" ? p_original_path : p_path;
+	String path = !p_original_path.is_empty() ? p_original_path : p_path;
 	loader.local_path = ProjectSettings::get_singleton()->localize_path(path);
 	loader.res_path = loader.local_path;
 	//loader.set_local_path( Globals::get_singleton()->localize_path(p_path) );
@@ -1045,7 +1045,7 @@ RES ResourceFormatLoaderBinary::load(const String &p_path, const String &p_origi
 }
 
 void ResourceFormatLoaderBinary::get_recognized_extensions_for_type(const String &p_type, List<String> *p_extensions) const {
-	if (p_type == "") {
+	if (p_type.is_empty()) {
 		get_recognized_extensions(p_extensions);
 		return;
 	}
@@ -1572,7 +1572,7 @@ void ResourceFormatSaverBinaryInstance::write_variant(FileAccess *f, const Varia
 				return; // don't save it
 			}
 
-			if (res->get_path().length() && res->get_path().find("::") == -1) {
+			if (!res->is_built_in()) {
 				f->store_32(OBJECT_EXTERNAL_RESOURCE_INDEX);
 				f->store_32(external_resources[res]);
 			} else {
@@ -1743,7 +1743,7 @@ void ResourceFormatSaverBinaryInstance::_find_resources(const Variant &p_variant
 				return;
 			}
 
-			if (!p_main && (!bundle_resources) && res->get_path().length() && res->get_path().find("::") == -1) {
+			if (!p_main && (!bundle_resources) && !res->is_built_in()) {
 				if (res->get_path() == path) {
 					ERR_PRINT("Circular reference to resource being saved found: '" + local_path + "' will be null next time it's loaded.");
 					return;
@@ -1960,8 +1960,8 @@ Error ResourceFormatSaverBinaryInstance::save(const String &p_path, const RES &p
 	Vector<RES> save_order;
 	save_order.resize(external_resources.size());
 
-	for (Map<RES, int>::Element *E = external_resources.front(); E; E = E->next()) {
-		save_order.write[E->get()] = E->key();
+	for (const KeyValue<RES, int> &E : external_resources) {
+		save_order.write[E.value] = E.key;
 	}
 
 	for (int i = 0; i < save_order.size(); i++) {
@@ -1978,8 +1978,8 @@ Error ResourceFormatSaverBinaryInstance::save(const String &p_path, const RES &p
 	Set<String> used_unique_ids;
 
 	for (RES &r : saved_resources) {
-		if (r->get_path() == "" || r->get_path().find("::") != -1) {
-			if (r->get_scene_unique_id() != "") {
+		if (r->is_built_in()) {
+			if (!r->get_scene_unique_id().is_empty()) {
 				if (used_unique_ids.has(r->get_scene_unique_id())) {
 					r->set_scene_unique_id("");
 				} else {
@@ -1992,8 +1992,8 @@ Error ResourceFormatSaverBinaryInstance::save(const String &p_path, const RES &p
 	Map<RES, int> resource_map;
 	int res_index = 0;
 	for (RES &r : saved_resources) {
-		if (r->get_path() == "" || r->get_path().find("::") != -1) {
-			if (r->get_scene_unique_id() == "") {
+		if (r->is_built_in()) {
+			if (r->get_scene_unique_id().is_empty()) {
 				String new_id;
 
 				while (true) {

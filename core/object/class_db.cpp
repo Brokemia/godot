@@ -37,8 +37,6 @@
 #define OBJTYPE_RLOCK RWLockRead _rw_lockr_(lock);
 #define OBJTYPE_WLOCK RWLockWrite _rw_lockw_(lock);
 
-#ifdef DEBUG_METHODS_ENABLED
-
 MethodDefinition D_METHOD(const char *p_name) {
 	MethodDefinition md;
 	md.name = StaticCString::create(p_name);
@@ -225,8 +223,6 @@ MethodDefinition D_METHOD(const char *p_name, const char *p_arg1, const char *p_
 	md.args.write[12] = StaticCString::create(p_arg13);
 	return md;
 }
-
-#endif
 
 ClassDB::APIType ClassDB::current_api = API_CORE;
 
@@ -501,22 +497,6 @@ void ClassDB::add_compatibility_class(const StringName &p_class, const StringNam
 	compat_classes[p_class] = p_fallback;
 }
 
-thread_local bool initializing_with_extension = false;
-thread_local ObjectNativeExtension *initializing_extension = nullptr;
-thread_local GDExtensionClassInstancePtr initializing_extension_instance = nullptr;
-
-void ClassDB::instance_get_native_extension_data(ObjectNativeExtension **r_extension, GDExtensionClassInstancePtr *r_extension_instance, Object *p_base) {
-	if (initializing_with_extension) {
-		*r_extension = initializing_extension;
-		*r_extension_instance = initializing_extension_instance;
-		initializing_with_extension = false;
-		initializing_extension->set_object_instance(*r_extension_instance, p_base);
-	} else {
-		*r_extension = nullptr;
-		*r_extension_instance = nullptr;
-	}
-}
-
 Object *ClassDB::instantiate(const StringName &p_class) {
 	ClassInfo *ti;
 	{
@@ -529,7 +509,7 @@ Object *ClassDB::instantiate(const StringName &p_class) {
 		}
 		ERR_FAIL_COND_V_MSG(!ti, nullptr, "Cannot get class '" + String(p_class) + "'.");
 		ERR_FAIL_COND_V_MSG(ti->disabled, nullptr, "Class '" + String(p_class) + "' is disabled.");
-		ERR_FAIL_COND_V(!ti->creation_func, nullptr);
+		ERR_FAIL_COND_V_MSG(!ti->creation_func, nullptr, "Class '" + String(p_class) + "' or its base class cannot be instantiated.");
 	}
 #ifdef TOOLS_ENABLED
 	if (ti->api == API_EDITOR && !Engine::get_singleton()->is_editor_hint()) {
@@ -537,12 +517,31 @@ Object *ClassDB::instantiate(const StringName &p_class) {
 		return nullptr;
 	}
 #endif
-	if (ti->native_extension) {
-		initializing_with_extension = true;
-		initializing_extension = ti->native_extension;
-		initializing_extension_instance = ti->native_extension->create_instance(ti->native_extension->class_userdata);
+	if (ti->native_extension && ti->native_extension->create_instance) {
+		return (Object *)ti->native_extension->create_instance(ti->native_extension->class_userdata);
+	} else {
+		return ti->creation_func();
 	}
-	return ti->creation_func();
+}
+
+void ClassDB::set_object_extension_instance(Object *p_object, const StringName &p_class, GDExtensionClassInstancePtr p_instance) {
+	ERR_FAIL_COND(!p_object);
+	ClassInfo *ti;
+	{
+		OBJTYPE_RLOCK;
+		ti = classes.getptr(p_class);
+		if (!ti || ti->disabled || !ti->creation_func || (ti->native_extension && !ti->native_extension->create_instance)) {
+			if (compat_classes.has(p_class)) {
+				ti = classes.getptr(compat_classes[p_class]);
+			}
+		}
+		ERR_FAIL_COND_MSG(!ti, "Cannot get class '" + String(p_class) + "'.");
+		ERR_FAIL_COND_MSG(ti->disabled, "Class '" + String(p_class) + "' is disabled.");
+		ERR_FAIL_COND_MSG(!ti->native_extension, "Class '" + String(p_class) + "' has no native extension.");
+	}
+
+	p_object->_extension = ti->native_extension;
+	p_object->_extension_instance = p_instance;
 }
 
 bool ClassDB::can_instantiate(const StringName &p_class) {
@@ -580,7 +579,6 @@ void ClassDB::_add_class2(const StringName &p_class, const StringName &p_inherit
 	}
 }
 
-#ifdef DEBUG_METHODS_ENABLED
 static MethodInfo info_from_bind(MethodBind *p_method) {
 	MethodInfo minfo;
 	minfo.name = p_method->get_name();
@@ -601,7 +599,6 @@ static MethodInfo info_from_bind(MethodBind *p_method) {
 
 	return minfo;
 }
-#endif
 
 void ClassDB::get_method_list(const StringName &p_class, List<MethodInfo> *p_methods, bool p_no_inheritance, bool p_exclude_from_properties) {
 	OBJTYPE_RLOCK;
@@ -641,9 +638,8 @@ void ClassDB::get_method_list(const StringName &p_class, List<MethodInfo> *p_met
 
 		while ((K = type->method_map.next(K))) {
 			MethodBind *m = type->method_map[*K];
-			MethodInfo mi;
-			mi.name = m->get_name();
-			p_methods->push_back(mi);
+			MethodInfo minfo = info_from_bind(m);
+			p_methods->push_back(minfo);
 		}
 
 #endif
@@ -689,9 +685,8 @@ bool ClassDB::get_method_info(const StringName &p_class, const StringName &p_met
 		if (type->method_map.has(p_method)) {
 			if (r_info) {
 				MethodBind *m = type->method_map[p_method];
-				MethodInfo mi;
-				mi.name = m->get_name();
-				*r_info = mi;
+				MethodInfo minfo = info_from_bind(m);
+				*r_info = minfo;
 			}
 			return true;
 		}
@@ -736,7 +731,7 @@ void ClassDB::bind_integer_constant(const StringName &p_class, const StringName 
 	type->constant_map[p_name] = p_constant;
 
 	String enum_name = p_enum;
-	if (enum_name != String()) {
+	if (!enum_name.is_empty()) {
 		if (enum_name.find(".") != -1) {
 			enum_name = enum_name.get_slicec('.', 1);
 		}
@@ -892,6 +887,32 @@ void ClassDB::get_enum_constants(const StringName &p_class, const StringName &p_
 	}
 }
 
+void ClassDB::set_method_error_return_values(const StringName &p_class, const StringName &p_method, const Vector<Error> &p_values) {
+	OBJTYPE_RLOCK;
+#ifdef DEBUG_METHODS_ENABLED
+	ClassInfo *type = classes.getptr(p_class);
+
+	ERR_FAIL_COND(!type);
+
+	type->method_error_values[p_method] = p_values;
+#endif
+}
+
+Vector<Error> ClassDB::get_method_error_return_values(const StringName &p_class, const StringName &p_method) {
+#ifdef DEBUG_METHODS_ENABLED
+	ClassInfo *type = classes.getptr(p_class);
+
+	ERR_FAIL_COND_V(!type, Vector<Error>());
+
+	if (!type->method_error_values.has(p_method)) {
+		return Vector<Error>();
+	}
+	return type->method_error_values[p_method];
+#else
+	return Vector<Error>();
+#endif
+}
+
 bool ClassDB::has_enum(const StringName &p_class, const StringName &p_name, bool p_no_inheritance) {
 	OBJTYPE_RLOCK;
 
@@ -1002,6 +1023,18 @@ void ClassDB::add_property_subgroup(const StringName &p_class, const String &p_n
 	type->property_list.push_back(PropertyInfo(Variant::NIL, p_name, PROPERTY_HINT_NONE, p_prefix, PROPERTY_USAGE_SUBGROUP));
 }
 
+void ClassDB::add_property_array_count(const StringName &p_class, const String &p_label, const StringName &p_count_property, const StringName &p_count_setter, const StringName &p_count_getter, const String &p_array_element_prefix, uint32_t p_count_usage) {
+	add_property(p_class, PropertyInfo(Variant::INT, p_count_property, PROPERTY_HINT_NONE, "", p_count_usage | PROPERTY_USAGE_ARRAY, vformat("%s,%s", p_label, p_array_element_prefix)), p_count_setter, p_count_getter);
+}
+
+void ClassDB::add_property_array(const StringName &p_class, const StringName &p_path, const String &p_array_element_prefix) {
+	OBJTYPE_WLOCK;
+	ClassInfo *type = classes.getptr(p_class);
+	ERR_FAIL_COND(!type);
+
+	type->property_list.push_back(PropertyInfo(Variant::NIL, p_path, PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_ARRAY, p_array_element_prefix));
+}
+
 // NOTE: For implementation simplicity reasons, this method doesn't allow setters to have optional arguments at the end.
 void ClassDB::add_property(const StringName &p_class, const PropertyInfo &p_pinfo, const StringName &p_setter, const StringName &p_getter, int p_index) {
 	lock.read_lock();
@@ -1066,6 +1099,20 @@ void ClassDB::set_property_default_value(const StringName &p_class, const String
 		default_values[p_class] = HashMap<StringName, Variant>();
 	}
 	default_values[p_class][p_name] = p_default;
+}
+
+void ClassDB::add_linked_property(const StringName &p_class, const String &p_property, const String &p_linked_property) {
+#ifdef TOOLS_ENABLED
+	OBJTYPE_WLOCK;
+	ClassInfo *type = classes.getptr(p_class);
+	ERR_FAIL_COND(!type);
+
+	ERR_FAIL_COND(!type->property_map.has(p_property));
+	ERR_FAIL_COND(!type->property_map.has(p_linked_property));
+
+	PropertyInfo &pinfo = type->property_map[p_property];
+	pinfo.linked_properties.push_back(p_linked_property);
+#endif
 }
 
 void ClassDB::get_property_list(const StringName &p_class, List<PropertyInfo> *p_list, bool p_no_inheritance, const Object *p_validator) {
@@ -1350,13 +1397,8 @@ void ClassDB::bind_method_custom(const StringName &p_class, MethodBind *p_method
 	type->method_map[p_method->get_name()] = p_method;
 }
 
-#ifdef DEBUG_METHODS_ENABLED
 MethodBind *ClassDB::bind_methodfi(uint32_t p_flags, MethodBind *p_bind, const MethodDefinition &method_name, const Variant **p_defs, int p_defcount) {
 	StringName mdname = method_name.name;
-#else
-MethodBind *ClassDB::bind_methodfi(uint32_t p_flags, MethodBind *p_bind, const char *method_name, const Variant **p_defs, int p_defcount) {
-	StringName mdname = StaticCString::create(method_name);
-#endif
 
 	OBJTYPE_WLOCK;
 	ERR_FAIL_COND_V(!p_bind, nullptr);
@@ -1407,7 +1449,7 @@ MethodBind *ClassDB::bind_methodfi(uint32_t p_flags, MethodBind *p_bind, const c
 	return p_bind;
 }
 
-void ClassDB::add_virtual_method(const StringName &p_class, const MethodInfo &p_method, bool p_virtual) {
+void ClassDB::add_virtual_method(const StringName &p_class, const MethodInfo &p_method, bool p_virtual, const Vector<String> &p_arg_names, bool p_object_core) {
 	ERR_FAIL_COND_MSG(!classes.has(p_class), "Request for nonexistent class '" + p_class + "'.");
 
 	OBJTYPE_WLOCK;
@@ -1417,6 +1459,19 @@ void ClassDB::add_virtual_method(const StringName &p_class, const MethodInfo &p_
 	if (p_virtual) {
 		mi.flags |= METHOD_FLAG_VIRTUAL;
 	}
+	if (p_object_core) {
+		mi.flags |= METHOD_FLAG_OBJECT_CORE;
+	}
+	if (p_arg_names.size()) {
+		if (p_arg_names.size() != mi.arguments.size()) {
+			WARN_PRINT("Mismatch argument name count for virtual function: " + String(p_class) + "::" + p_method.name);
+		} else {
+			for (int i = 0; i < p_arg_names.size(); i++) {
+				mi.arguments[i].name = p_arg_names[i];
+			}
+		}
+	}
+
 	classes[p_class].virtual_methods.push_back(mi);
 	classes[p_class].virtual_methods_map[p_method.name] = mi;
 

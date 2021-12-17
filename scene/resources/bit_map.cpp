@@ -48,7 +48,7 @@ void BitMap::create_from_image_alpha(const Ref<Image> &p_image, float p_threshol
 	img->convert(Image::FORMAT_LA8);
 	ERR_FAIL_COND(img->get_format() != Image::FORMAT_LA8);
 
-	create(Size2(img->get_width(), img->get_height()));
+	create(img->get_size());
 
 	const uint8_t *r = img->get_data().ptr();
 	uint8_t *w = bitmask.ptrw();
@@ -674,7 +674,7 @@ void BitMap::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("grow_mask", "pixels", "rect"), &BitMap::grow_mask);
 	ClassDB::bind_method(D_METHOD("opaque_to_polygons", "rect", "epsilon"), &BitMap::_opaque_to_polygons_bind, DEFVAL(2.0));
 
-	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NOEDITOR | PROPERTY_USAGE_INTERNAL), "_set_data", "_get_data");
+	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_data", "_get_data");
 }
 
 BitMap::BitMap() {}

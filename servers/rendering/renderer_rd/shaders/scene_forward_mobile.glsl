@@ -7,6 +7,8 @@
 /* Include our forward mobile UBOs definitions etc. */
 #include "scene_forward_mobile_inc.glsl"
 
+#define SHADER_IS_SRGB false
+
 /* INPUT ATTRIBS */
 
 layout(location = 0) in vec3 vertex_attrib;
@@ -92,7 +94,7 @@ layout(set = MATERIAL_UNIFORM_SET, binding = 0, std140) uniform MaterialUniforms
 
 #ifdef MODE_DUAL_PARABOLOID
 
-layout(location = 8) out float dp_clip;
+layout(location = 8) out highp float dp_clip;
 
 #endif
 
@@ -124,7 +126,7 @@ void main() {
 
 	mat3 world_normal_matrix;
 	if (bool(draw_call.flags & INSTANCE_FLAGS_NON_UNIFORM_SCALE)) {
-		world_normal_matrix = inverse(mat3(world_matrix));
+		world_normal_matrix = transpose(inverse(mat3(world_matrix)));
 	} else {
 		world_normal_matrix = mat3(world_matrix);
 	}
@@ -370,29 +372,40 @@ void main() {
 
 #VERSION_DEFINES
 
-//use medium precision for floats on mobile.
-
-precision mediump float;
+#define SHADER_IS_SRGB false
 
 /* Specialization Constants */
 
-/* Specialization Constants (Toggles) */
+#if !defined(MODE_RENDER_DEPTH)
 
-layout(constant_id = 0) const bool sc_use_forward_gi = false;
-layout(constant_id = 1) const bool sc_use_light_projector = false;
-layout(constant_id = 2) const bool sc_use_light_soft_shadows = false;
-layout(constant_id = 3) const bool sc_use_directional_soft_shadows = false;
+#if !defined(MODE_UNSHADED)
 
-/* Specialization Constants (Values) */
+layout(constant_id = 0) const bool sc_use_light_projector = false;
+layout(constant_id = 1) const bool sc_use_light_soft_shadows = false;
+layout(constant_id = 2) const bool sc_use_directional_soft_shadows = false;
 
-layout(constant_id = 6) const uint sc_soft_shadow_samples = 4;
-layout(constant_id = 7) const uint sc_penumbra_shadow_samples = 4;
+layout(constant_id = 3) const uint sc_soft_shadow_samples = 4;
+layout(constant_id = 4) const uint sc_penumbra_shadow_samples = 4;
 
-layout(constant_id = 8) const uint sc_directional_soft_shadow_samples = 4;
-layout(constant_id = 9) const uint sc_directional_penumbra_shadow_samples = 4;
+layout(constant_id = 5) const uint sc_directional_soft_shadow_samples = 4;
+layout(constant_id = 6) const uint sc_directional_penumbra_shadow_samples = 4;
 
-layout(constant_id = 10) const bool sc_decal_use_mipmaps = true;
-layout(constant_id = 11) const bool sc_projector_use_mipmaps = true;
+layout(constant_id = 8) const bool sc_projector_use_mipmaps = true;
+
+layout(constant_id = 9) const bool sc_disable_omni_lights = false;
+layout(constant_id = 10) const bool sc_disable_spot_lights = false;
+layout(constant_id = 11) const bool sc_disable_reflection_probes = false;
+layout(constant_id = 12) const bool sc_disable_directional_lights = false;
+
+#endif //!MODE_UNSHADED
+
+layout(constant_id = 7) const bool sc_decal_use_mipmaps = true;
+layout(constant_id = 13) const bool sc_disable_decals = false;
+layout(constant_id = 14) const bool sc_disable_fog = false;
+
+#endif //!MODE_RENDER_DEPTH
+
+layout(constant_id = 15) const float sc_luminance_multiplier = 2.0;
 
 /* Include our forward mobile UBOs definitions etc. */
 #include "scene_forward_mobile_inc.glsl"
@@ -486,7 +499,7 @@ layout(location = 0) out vec4 diffuse_buffer; //diffuse (rgb) and roughness
 layout(location = 1) out vec4 specular_buffer; //specular and SSS (subsurface scatter)
 #else
 
-layout(location = 0) out vec4 frag_color;
+layout(location = 0) out mediump vec4 frag_color;
 #endif // MODE_MULTIPLE_RENDER_TARGETS
 
 #endif // RENDER DEPTH
@@ -541,14 +554,14 @@ vec4 fog_process(vec3 vertex) {
 		}
 	}
 
-	float fog_amount = 1.0 - exp(min(0.0, vertex.z * scene_data.fog_density));
+	float fog_amount = 1.0 - exp(min(0.0, -length(vertex) * scene_data.fog_density));
 
-	if (abs(scene_data.fog_height_density) > 0.001) {
+	if (abs(scene_data.fog_height_density) >= 0.0001) {
 		float y = (scene_data.camera_matrix * vec4(vertex, 1.0)).y;
 
-		float y_dist = scene_data.fog_height - y;
+		float y_dist = y - scene_data.fog_height;
 
-		float vfog_amount = clamp(exp(y_dist * scene_data.fog_height_density), 0.0, 1.0);
+		float vfog_amount = 1.0 - exp(min(0.0, y_dist * scene_data.fog_height_density));
 
 		fog_amount = max(vfog_amount, fog_amount);
 	}
@@ -692,7 +705,7 @@ void main() {
 #endif // ALPHA_ANTIALIASING_EDGE_USED
 
 #ifdef USE_OPAQUE_PREPASS
-	if (alpha < opaque_prepass_threshold) {
+	if (alpha < scene_data.opaque_prepass_threshold) {
 		discard;
 	}
 #endif // USE_OPAQUE_PREPASS
@@ -735,7 +748,7 @@ void main() {
 	// to maximize VGPR usage
 	// Draw "fixed" fog before volumetric fog to ensure volumetric fog can appear in front of the sky.
 
-	if (scene_data.fog_enabled) {
+	if (!sc_disable_fog && scene_data.fog_enabled) {
 		fog = fog_process(vertex);
 	}
 
@@ -753,7 +766,7 @@ void main() {
 	vec3 vertex_ddx = dFdx(vertex);
 	vec3 vertex_ddy = dFdy(vertex);
 
-	{ //Decals
+	if (!sc_disable_decals) { //Decals
 		// must implement
 
 		uint decal_indices = draw_call.decals.x;
@@ -774,25 +787,35 @@ void main() {
 				continue; //out of decal
 			}
 
-			//we need ddx/ddy for mipmaps, so simulate them
-			vec2 ddx = (decals.data[decal_index].xform * vec4(vertex_ddx, 0.0)).xz;
-			vec2 ddy = (decals.data[decal_index].xform * vec4(vertex_ddy, 0.0)).xz;
-
 			float fade = pow(1.0 - (uv_local.y > 0.0 ? uv_local.y : -uv_local.y), uv_local.y > 0.0 ? decals.data[decal_index].upper_fade : decals.data[decal_index].lower_fade);
 
 			if (decals.data[decal_index].normal_fade > 0.0) {
 				fade *= smoothstep(decals.data[decal_index].normal_fade, 1.0, dot(normal_interp, decals.data[decal_index].normal) * 0.5 + 0.5);
 			}
 
+			//we need ddx/ddy for mipmaps, so simulate them
+			vec2 ddx = (decals.data[decal_index].xform * vec4(vertex_ddx, 0.0)).xz;
+			vec2 ddy = (decals.data[decal_index].xform * vec4(vertex_ddy, 0.0)).xz;
+
 			if (decals.data[decal_index].albedo_rect != vec4(0.0)) {
 				//has albedo
-				vec4 decal_albedo = textureGrad(sampler2D(decal_atlas_srgb, material_samplers[SAMPLER_LINEAR_WITH_MIPMAPS_CLAMP]), uv_local.xz * decals.data[decal_index].albedo_rect.zw + decals.data[decal_index].albedo_rect.xy, ddx * decals.data[decal_index].albedo_rect.zw, ddy * decals.data[decal_index].albedo_rect.zw);
+				vec4 decal_albedo;
+				if (sc_decal_use_mipmaps) {
+					decal_albedo = textureGrad(sampler2D(decal_atlas_srgb, decal_sampler), uv_local.xz * decals.data[decal_index].albedo_rect.zw + decals.data[decal_index].albedo_rect.xy, ddx * decals.data[decal_index].albedo_rect.zw, ddy * decals.data[decal_index].albedo_rect.zw);
+				} else {
+					decal_albedo = textureLod(sampler2D(decal_atlas_srgb, decal_sampler), uv_local.xz * decals.data[decal_index].albedo_rect.zw + decals.data[decal_index].albedo_rect.xy, 0.0);
+				}
 				decal_albedo *= decals.data[decal_index].modulate;
 				decal_albedo.a *= fade;
 				albedo = mix(albedo, decal_albedo.rgb, decal_albedo.a * decals.data[decal_index].albedo_mix);
 
 				if (decals.data[decal_index].normal_rect != vec4(0.0)) {
-					vec3 decal_normal = textureGrad(sampler2D(decal_atlas, material_samplers[SAMPLER_LINEAR_WITH_MIPMAPS_CLAMP]), uv_local.xz * decals.data[decal_index].normal_rect.zw + decals.data[decal_index].normal_rect.xy, ddx * decals.data[decal_index].normal_rect.zw, ddy * decals.data[decal_index].normal_rect.zw).xyz;
+					vec3 decal_normal;
+					if (sc_decal_use_mipmaps) {
+						decal_normal = textureGrad(sampler2D(decal_atlas, decal_sampler), uv_local.xz * decals.data[decal_index].normal_rect.zw + decals.data[decal_index].normal_rect.xy, ddx * decals.data[decal_index].normal_rect.zw, ddy * decals.data[decal_index].normal_rect.zw).xyz;
+					} else {
+						decal_normal = textureLod(sampler2D(decal_atlas, decal_sampler), uv_local.xz * decals.data[decal_index].normal_rect.zw + decals.data[decal_index].normal_rect.xy, 0.0).xyz;
+					}
 					decal_normal.xy = decal_normal.xy * vec2(2.0, -2.0) - vec2(1.0, -1.0); //users prefer flipped y normal maps in most authoring software
 					decal_normal.z = sqrt(max(0.0, 1.0 - dot(decal_normal.xy, decal_normal.xy)));
 					//convert to view space, use xzy because y is up
@@ -802,7 +825,12 @@ void main() {
 				}
 
 				if (decals.data[decal_index].orm_rect != vec4(0.0)) {
-					vec3 decal_orm = textureGrad(sampler2D(decal_atlas, material_samplers[SAMPLER_LINEAR_WITH_MIPMAPS_CLAMP]), uv_local.xz * decals.data[decal_index].orm_rect.zw + decals.data[decal_index].orm_rect.xy, ddx * decals.data[decal_index].orm_rect.zw, ddy * decals.data[decal_index].orm_rect.zw).xyz;
+					vec3 decal_orm;
+					if (sc_decal_use_mipmaps) {
+						decal_orm = textureGrad(sampler2D(decal_atlas, decal_sampler), uv_local.xz * decals.data[decal_index].orm_rect.zw + decals.data[decal_index].orm_rect.xy, ddx * decals.data[decal_index].orm_rect.zw, ddy * decals.data[decal_index].orm_rect.zw).xyz;
+					} else {
+						decal_orm = textureLod(sampler2D(decal_atlas, decal_sampler), uv_local.xz * decals.data[decal_index].orm_rect.zw + decals.data[decal_index].orm_rect.xy, 0.0).xyz;
+					}
 					ao = mix(ao, decal_orm.r, decal_albedo.a);
 					roughness = mix(roughness, decal_orm.g, decal_albedo.a);
 					metallic = mix(metallic, decal_orm.b, decal_albedo.a);
@@ -811,7 +839,11 @@ void main() {
 
 			if (decals.data[decal_index].emission_rect != vec4(0.0)) {
 				//emission is additive, so its independent from albedo
-				emission += textureGrad(sampler2D(decal_atlas_srgb, material_samplers[SAMPLER_LINEAR_WITH_MIPMAPS_CLAMP]), uv_local.xz * decals.data[decal_index].emission_rect.zw + decals.data[decal_index].emission_rect.xy, ddx * decals.data[decal_index].emission_rect.zw, ddy * decals.data[decal_index].emission_rect.zw).xyz * decals.data[decal_index].emission_energy * fade;
+				if (sc_decal_use_mipmaps) {
+					emission += textureGrad(sampler2D(decal_atlas_srgb, decal_sampler), uv_local.xz * decals.data[decal_index].emission_rect.zw + decals.data[decal_index].emission_rect.xy, ddx * decals.data[decal_index].emission_rect.zw, ddy * decals.data[decal_index].emission_rect.zw).xyz * decals.data[decal_index].emission_energy * fade;
+				} else {
+					emission += textureLod(sampler2D(decal_atlas_srgb, decal_sampler), uv_local.xz * decals.data[decal_index].emission_rect.zw + decals.data[decal_index].emission_rect.xy, 0.0).xyz * decals.data[decal_index].emission_energy * fade;
+				}
 			}
 		}
 	} //Decals
@@ -821,7 +853,7 @@ void main() {
 
 #ifdef NORMAL_USED
 	if (scene_data.roughness_limiter_enabled) {
-		//http://www.jp.square-enix.com/tech/library/pdf/ImprovedGeometricSpecularAA.pdf
+		//https://www.jp.square-enix.com/tech/library/pdf/ImprovedGeometricSpecularAA.pdf
 		float roughness2 = roughness * roughness;
 		vec3 dndu = dFdx(normal), dndv = dFdy(normal);
 		float variance = scene_data.roughness_limiter_amount * (dot(dndu, dndu) + dot(dndv, dndv));
@@ -840,6 +872,7 @@ void main() {
 
 	if (scene_data.use_reflection_cubemap) {
 		vec3 ref_vec = reflect(-view, normal);
+		float horizon = min(1.0 + dot(ref_vec, normal), 1.0);
 		ref_vec = scene_data.radiance_inverse_xform * ref_vec;
 #ifdef USE_RADIANCE_CUBEMAP_ARRAY
 
@@ -852,7 +885,6 @@ void main() {
 		specular_light = textureLod(samplerCube(radiance_cubemap, material_samplers[SAMPLER_LINEAR_WITH_MIPMAPS_CLAMP]), ref_vec, roughness * MAX_ROUGHNESS_LOD).rgb;
 
 #endif //USE_RADIANCE_CUBEMAP_ARRAY
-		float horizon = min(1.0 + dot(ref_vec, normal), 1.0);
 		specular_light *= horizon * horizon;
 		specular_light *= scene_data.ambient_light_color_energy.a;
 	}
@@ -902,15 +934,15 @@ void main() {
 		const float c4 = 0.886227;
 		const float c5 = 0.247708;
 		ambient_light += (c1 * lightmap_captures.data[index].sh[8].rgb * (wnormal.x * wnormal.x - wnormal.y * wnormal.y) +
-						  c3 * lightmap_captures.data[index].sh[6].rgb * wnormal.z * wnormal.z +
-						  c4 * lightmap_captures.data[index].sh[0].rgb -
-						  c5 * lightmap_captures.data[index].sh[6].rgb +
-						  2.0 * c1 * lightmap_captures.data[index].sh[4].rgb * wnormal.x * wnormal.y +
-						  2.0 * c1 * lightmap_captures.data[index].sh[7].rgb * wnormal.x * wnormal.z +
-						  2.0 * c1 * lightmap_captures.data[index].sh[5].rgb * wnormal.y * wnormal.z +
-						  2.0 * c2 * lightmap_captures.data[index].sh[3].rgb * wnormal.x +
-						  2.0 * c2 * lightmap_captures.data[index].sh[1].rgb * wnormal.y +
-						  2.0 * c2 * lightmap_captures.data[index].sh[2].rgb * wnormal.z);
+				c3 * lightmap_captures.data[index].sh[6].rgb * wnormal.z * wnormal.z +
+				c4 * lightmap_captures.data[index].sh[0].rgb -
+				c5 * lightmap_captures.data[index].sh[6].rgb +
+				2.0 * c1 * lightmap_captures.data[index].sh[4].rgb * wnormal.x * wnormal.y +
+				2.0 * c1 * lightmap_captures.data[index].sh[7].rgb * wnormal.x * wnormal.z +
+				2.0 * c1 * lightmap_captures.data[index].sh[5].rgb * wnormal.y * wnormal.z +
+				2.0 * c2 * lightmap_captures.data[index].sh[3].rgb * wnormal.x +
+				2.0 * c2 * lightmap_captures.data[index].sh[1].rgb * wnormal.y +
+				2.0 * c2 * lightmap_captures.data[index].sh[2].rgb * wnormal.z);
 
 	} else if (bool(draw_call.flags & INSTANCE_FLAGS_USE_LIGHTMAP)) { // has actual lightmap
 		bool uses_sh = bool(draw_call.flags & INSTANCE_FLAGS_USE_SH_LIGHTMAP);
@@ -951,7 +983,7 @@ void main() {
 
 	// skipping ssao, do we remove ssao totally?
 
-	{ //Reflection probes
+	if (!sc_disable_reflection_probes) { //Reflection probes
 		vec4 reflection_accum = vec4(0.0, 0.0, 0.0, 0.0);
 		vec4 ambient_accum = vec4(0.0, 0.0, 0.0, 0.0);
 
@@ -1017,8 +1049,8 @@ void main() {
 // LIGHTING
 #if !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)
 
-	{ //directional light
-
+	if (!sc_disable_directional_lights) { //directional light
+#ifndef SHADOWS_DISABLED
 		// Do shadow and lighting in two passes to reduce register pressure
 		uint shadow0 = 0;
 		uint shadow1 = 0;
@@ -1294,6 +1326,8 @@ void main() {
 			}
 		}
 
+#endif // SHADOWS_DISABLED
+
 		for (uint i = 0; i < 8; i++) {
 			if (i >= scene_data.directional_light_count) {
 				break;
@@ -1306,16 +1340,16 @@ void main() {
 			// We're not doing light transmittence
 
 			float shadow = 1.0;
-
+#ifndef SHADOWS_DISABLED
 			if (i < 4) {
 				shadow = float(shadow0 >> (i * 8) & 0xFF) / 255.0;
 			} else {
 				shadow = float(shadow1 >> ((i - 4) * 8) & 0xFF) / 255.0;
 			}
-
+#endif
 			blur_shadow(shadow);
 
-			light_compute(normal, directional_lights.data[i].direction, normalize(view), 0.0, directional_lights.data[i].color * directional_lights.data[i].energy, shadow, f0, orms, 1.0,
+			light_compute(normal, directional_lights.data[i].direction, normalize(view), 0.0, directional_lights.data[i].color * directional_lights.data[i].energy, shadow, f0, orms, 1.0, albedo, alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 					backlight,
 #endif
@@ -1328,7 +1362,7 @@ void main() {
 #endif
 */
 #ifdef LIGHT_RIM_USED
-					rim, rim_tint, albedo,
+					rim, rim_tint,
 #endif
 #ifdef LIGHT_CLEARCOAT_USED
 					clearcoat, clearcoat_gloss,
@@ -1339,15 +1373,12 @@ void main() {
 #ifdef USE_SOFT_SHADOW
 					directional_lights.data[i].size,
 #endif
-#ifdef USE_SHADOW_TO_OPACITY
-					alpha,
-#endif
 					diffuse_light,
 					specular_light);
 		}
 	} //directional light
 
-	{ //omni lights
+	if (!sc_disable_omni_lights) { //omni lights
 		uint light_indices = draw_call.omni_lights.x;
 		for (uint i = 0; i < 8; i++) {
 			uint light_index = light_indices & 0xFF;
@@ -1361,11 +1392,11 @@ void main() {
 				break;
 			}
 
-			float shadow = light_process_omni_shadow(light_index, vertex, view);
+			float shadow = light_process_omni_shadow(light_index, vertex, normal);
 
 			shadow = blur_shadow(shadow);
 
-			light_process_omni(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow,
+			light_process_omni(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 					backlight,
 #endif
@@ -1379,7 +1410,6 @@ void main() {
 #ifdef LIGHT_RIM_USED
 					rim,
 					rim_tint,
-					albedo,
 #endif
 #ifdef LIGHT_CLEARCOAT_USED
 					clearcoat, clearcoat_gloss,
@@ -1387,14 +1417,11 @@ void main() {
 #ifdef LIGHT_ANISOTROPY_USED
 					tangent, binormal, anisotropy,
 #endif
-#ifdef USE_SHADOW_TO_OPACITY
-					alpha,
-#endif
 					diffuse_light, specular_light);
 		}
 	} //omni lights
 
-	{ //spot lights
+	if (!sc_disable_spot_lights) { //spot lights
 
 		uint light_indices = draw_call.spot_lights.x;
 		for (uint i = 0; i < 8; i++) {
@@ -1409,11 +1436,11 @@ void main() {
 				break;
 			}
 
-			float shadow = light_process_spot_shadow(light_index, vertex, view);
+			float shadow = light_process_spot_shadow(light_index, vertex, normal);
 
 			shadow = blur_shadow(shadow);
 
-			light_process_spot(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow,
+			light_process_spot(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, shadow, albedo, alpha,
 #ifdef LIGHT_BACKLIGHT_USED
 					backlight,
 #endif
@@ -1427,16 +1454,12 @@ void main() {
 #ifdef LIGHT_RIM_USED
 					rim,
 					rim_tint,
-					albedo,
 #endif
 #ifdef LIGHT_CLEARCOAT_USED
 					clearcoat, clearcoat_gloss,
 #endif
 #ifdef LIGHT_ANISOTROPY_USED
 					tangent, binormal, anisotropy,
-#endif
-#ifdef USE_SHADOW_TO_OPACITY
-					alpha,
 #endif
 					diffuse_light, specular_light);
 		}
@@ -1453,7 +1476,7 @@ void main() {
 
 #ifdef USE_OPAQUE_PREPASS
 
-	if (alpha < opaque_prepass_threshold) {
+	if (alpha < scene_data.opaque_prepass_threshold) {
 		discard;
 	}
 
@@ -1525,11 +1548,14 @@ void main() {
 	frag_color = vec4(albedo, alpha);
 #else // MODE_UNSHADED
 	frag_color = vec4(emission + ambient_light + diffuse_light + specular_light, alpha);
-	//frag_color = vec4(1.0);
 #endif // MODE_UNSHADED
 
 	// Draw "fixed" fog before volumetric fog to ensure volumetric fog can appear in front of the sky.
 	frag_color.rgb = mix(frag_color.rgb, fog.rgb, fog.a);
+
+	// On mobile we use a UNORM buffer with 10bpp which results in a range from 0.0 - 1.0 resulting in HDR breaking
+	// We divide by sc_luminance_multiplier to support a range from 0.0 - 2.0 both increasing precision on bright and darker images
+	frag_color.rgb = frag_color.rgb / sc_luminance_multiplier;
 
 #endif //MODE_MULTIPLE_RENDER_TARGETS
 

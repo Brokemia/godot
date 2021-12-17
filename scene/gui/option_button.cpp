@@ -71,7 +71,11 @@ void OptionButton::_notification(int p_what) {
 						clr = get_theme_color(SNAME("font_disabled_color"));
 						break;
 					default:
-						clr = get_theme_color(SNAME("font_color"));
+						if (has_focus()) {
+							clr = get_theme_color(SNAME("font_focus_color"));
+						} else {
+							clr = get_theme_color(SNAME("font_color"));
+						}
 				}
 			}
 
@@ -115,7 +119,7 @@ void OptionButton::_selected(int p_which) {
 }
 
 void OptionButton::pressed() {
-	Size2 size = get_size();
+	Size2 size = get_size() * get_viewport()->get_canvas_transform().get_scale();
 	popup->set_position(get_screen_position() + Size2(0, size.height * get_global_transform().get_scale().y));
 	popup->set_size(Size2(size.width, 0));
 	popup->popup();
@@ -328,7 +332,7 @@ void OptionButton::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("_set_items"), &OptionButton::_set_items);
 	ClassDB::bind_method(D_METHOD("_get_items"), &OptionButton::_get_items);
 
-	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "items", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NOEDITOR | PROPERTY_USAGE_INTERNAL), "_set_items", "_get_items");
+	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "items", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_items", "_get_items");
 	// "selected" property must come after "items", otherwise GH-10213 occurs.
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "selected"), "_select_int", "get_selected");
 	ADD_SIGNAL(MethodInfo("item_selected", PropertyInfo(Variant::INT, "index")));
@@ -337,7 +341,7 @@ void OptionButton::_bind_methods() {
 
 OptionButton::OptionButton() {
 	set_toggle_mode(true);
-	set_text_align(ALIGN_LEFT);
+	set_text_alignment(HORIZONTAL_ALIGNMENT_LEFT);
 	if (is_layout_rtl()) {
 		if (has_theme_icon(SNAME("arrow"))) {
 			_set_internal_margin(SIDE_LEFT, Control::get_theme_icon(SNAME("arrow"))->get_width());
@@ -351,7 +355,7 @@ OptionButton::OptionButton() {
 
 	popup = memnew(PopupMenu);
 	popup->hide();
-	add_child(popup);
+	add_child(popup, false, INTERNAL_MODE_FRONT);
 	popup->connect("index_pressed", callable_mp(this, &OptionButton::_selected));
 	popup->connect("id_focused", callable_mp(this, &OptionButton::_focused));
 	popup->connect("popup_hide", callable_mp((BaseButton *)this, &BaseButton::set_pressed), varray(false));

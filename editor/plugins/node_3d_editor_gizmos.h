@@ -31,11 +31,12 @@
 #ifndef NODE_3D_EDITOR_GIZMOS_H
 #define NODE_3D_EDITOR_GIZMOS_H
 
+#include "core/templates/local_vector.h"
 #include "core/templates/ordered_hash_map.h"
+#include "scene/3d/camera_3d.h"
 #include "scene/3d/node_3d.h"
 #include "scene/3d/skeleton_3d.h"
 
-class Camera3D;
 class Timer;
 class EditorNode3DGizmoPlugin;
 
@@ -44,7 +45,7 @@ class EditorNode3DGizmo : public Node3DGizmo {
 
 	struct Instance {
 		RID instance;
-		Ref<ArrayMesh> mesh;
+		Ref<Mesh> mesh;
 		Ref<Material> material;
 		Ref<SkinReference> skin_reference;
 		bool extra_margin = false;
@@ -78,10 +79,23 @@ protected:
 
 	EditorNode3DGizmoPlugin *gizmo_plugin;
 
+	GDVIRTUAL0(_redraw)
+	GDVIRTUAL1RC(String, _get_handle_name, int)
+	GDVIRTUAL1RC(bool, _is_handle_highlighted, int)
+
+	GDVIRTUAL1RC(Variant, _get_handle_value, int)
+	GDVIRTUAL3(_set_handle, int, const Camera3D *, Vector2)
+	GDVIRTUAL3(_commit_handle, int, Variant, bool)
+
+	GDVIRTUAL2RC(int, _subgizmos_intersect_ray, const Camera3D *, Vector2)
+	GDVIRTUAL2RC(Vector<int>, _subgizmos_intersect_frustum, const Camera3D *, TypedArray<Plane>)
+	GDVIRTUAL1RC(Transform3D, _get_subgizmo_transform, int)
+	GDVIRTUAL2(_set_subgizmo_transform, int, Transform3D)
+	GDVIRTUAL3(_commit_subgizmos, Vector<int>, TypedArray<Transform3D>, bool)
 public:
 	void add_lines(const Vector<Vector3> &p_lines, const Ref<Material> &p_material, bool p_billboard = false, const Color &p_modulate = Color(1, 1, 1));
 	void add_vertices(const Vector<Vector3> &p_vertices, const Ref<Material> &p_material, Mesh::PrimitiveType p_primitive_type, bool p_billboard = false, const Color &p_modulate = Color(1, 1, 1));
-	void add_mesh(const Ref<ArrayMesh> &p_mesh, const Ref<Material> &p_material = Ref<Material>(), const Transform3D &p_xform = Transform3D(), const Ref<SkinReference> &p_skin_reference = Ref<SkinReference>());
+	void add_mesh(const Ref<Mesh> &p_mesh, const Ref<Material> &p_material = Ref<Material>(), const Transform3D &p_xform = Transform3D(), const Ref<SkinReference> &p_skin_reference = Ref<SkinReference>());
 	void add_collision_segments(const Vector<Vector3> &p_lines);
 	void add_collision_triangles(const Ref<TriangleMesh> &p_tmesh);
 	void add_unscaled_billboard(const Ref<Material> &p_material, real_t p_scale = 1, const Color &p_modulate = Color(1, 1, 1));
@@ -143,6 +157,28 @@ protected:
 	static void _bind_methods();
 	virtual bool has_gizmo(Node3D *p_spatial);
 	virtual Ref<EditorNode3DGizmo> create_gizmo(Node3D *p_spatial);
+
+	GDVIRTUAL1RC(bool, _has_gizmo, Node3D *)
+	GDVIRTUAL1RC(Ref<EditorNode3DGizmo>, _create_gizmo, Node3D *)
+
+	GDVIRTUAL0RC(String, _get_gizmo_name)
+	GDVIRTUAL0RC(int, _get_priority)
+	GDVIRTUAL0RC(bool, _can_be_hidden)
+	GDVIRTUAL0RC(bool, _is_selectable_when_hidden)
+
+	GDVIRTUAL1(_redraw, Ref<EditorNode3DGizmo>)
+	GDVIRTUAL2RC(String, _get_handle_name, Ref<EditorNode3DGizmo>, int)
+	GDVIRTUAL2RC(bool, _is_handle_highlighted, Ref<EditorNode3DGizmo>, int)
+	GDVIRTUAL2RC(Variant, _get_handle_value, Ref<EditorNode3DGizmo>, int)
+
+	GDVIRTUAL4(_set_handle, Ref<EditorNode3DGizmo>, int, const Camera3D *, Vector2)
+	GDVIRTUAL4(_commit_handle, Ref<EditorNode3DGizmo>, int, Variant, bool)
+
+	GDVIRTUAL3RC(int, _subgizmos_intersect_ray, Ref<EditorNode3DGizmo>, const Camera3D *, Vector2)
+	GDVIRTUAL3RC(Vector<int>, _subgizmos_intersect_frustum, Ref<EditorNode3DGizmo>, const Camera3D *, TypedArray<Plane>)
+	GDVIRTUAL2RC(Transform3D, _get_subgizmo_transform, Ref<EditorNode3DGizmo>, int)
+	GDVIRTUAL3(_set_subgizmo_transform, Ref<EditorNode3DGizmo>, int, Transform3D)
+	GDVIRTUAL4(_commit_subgizmos, Ref<EditorNode3DGizmo>, Vector<int>, TypedArray<Transform3D>, bool)
 
 public:
 	void create_material(const String &p_name, const Color &p_color, bool p_billboard = false, bool p_on_top = false, bool p_use_vertex_color = false);
@@ -211,6 +247,19 @@ public:
 	void redraw(EditorNode3DGizmo *p_gizmo) override;
 
 	AudioStreamPlayer3DGizmoPlugin();
+};
+
+class AudioListener3DGizmoPlugin : public EditorNode3DGizmoPlugin {
+	GDCLASS(AudioListener3DGizmoPlugin, EditorNode3DGizmoPlugin);
+
+public:
+	bool has_gizmo(Node3D *p_spatial) override;
+	String get_gizmo_name() const override;
+	int get_priority() const override;
+
+	void redraw(EditorNode3DGizmo *p_gizmo) override;
+
+	AudioListener3DGizmoPlugin();
 };
 
 class Camera3DGizmoPlugin : public EditorNode3DGizmoPlugin {
@@ -283,18 +332,6 @@ public:
 	Position3DGizmoPlugin();
 };
 
-class Skeleton3DGizmoPlugin : public EditorNode3DGizmoPlugin {
-	GDCLASS(Skeleton3DGizmoPlugin, EditorNode3DGizmoPlugin);
-
-public:
-	bool has_gizmo(Node3D *p_spatial) override;
-	String get_gizmo_name() const override;
-	int get_priority() const override;
-	void redraw(EditorNode3DGizmo *p_gizmo) override;
-
-	Skeleton3DGizmoPlugin();
-};
-
 class PhysicalBone3DGizmoPlugin : public EditorNode3DGizmoPlugin {
 	GDCLASS(PhysicalBone3DGizmoPlugin, EditorNode3DGizmoPlugin);
 
@@ -343,8 +380,8 @@ public:
 	VehicleWheel3DGizmoPlugin();
 };
 
-class SoftBody3DGizmoPlugin : public EditorNode3DGizmoPlugin {
-	GDCLASS(SoftBody3DGizmoPlugin, EditorNode3DGizmoPlugin);
+class SoftDynamicBody3DGizmoPlugin : public EditorNode3DGizmoPlugin {
+	GDCLASS(SoftDynamicBody3DGizmoPlugin, EditorNode3DGizmoPlugin);
 
 public:
 	bool has_gizmo(Node3D *p_spatial) override;
@@ -358,7 +395,7 @@ public:
 	void commit_handle(const EditorNode3DGizmo *p_gizmo, int p_id, const Variant &p_restore, bool p_cancel = false) override;
 	bool is_handle_highlighted(const EditorNode3DGizmo *p_gizmo, int p_id) const override;
 
-	SoftBody3DGizmoPlugin();
+	SoftDynamicBody3DGizmoPlugin();
 };
 
 class VisibleOnScreenNotifier3DGizmoPlugin : public EditorNode3DGizmoPlugin {
@@ -630,6 +667,23 @@ public:
 			Vector<Vector3> *r_body_b_points);
 
 	Joint3DGizmoPlugin();
+};
+
+class FogVolumeGizmoPlugin : public EditorNode3DGizmoPlugin {
+	GDCLASS(FogVolumeGizmoPlugin, EditorNode3DGizmoPlugin);
+
+public:
+	bool has_gizmo(Node3D *p_spatial) override;
+	String get_gizmo_name() const override;
+	int get_priority() const override;
+	void redraw(EditorNode3DGizmo *p_gizmo) override;
+
+	String get_handle_name(const EditorNode3DGizmo *p_gizmo, int p_id) const override;
+	Variant get_handle_value(const EditorNode3DGizmo *p_gizmo, int p_id) const override;
+	void set_handle(const EditorNode3DGizmo *p_gizmo, int p_id, Camera3D *p_camera, const Point2 &p_point) override;
+	void commit_handle(const EditorNode3DGizmo *p_gizmo, int p_id, const Variant &p_restore, bool p_cancel = false) override;
+
+	FogVolumeGizmoPlugin();
 };
 
 #endif // NODE_3D_EDITOR_GIZMOS_H

@@ -165,7 +165,7 @@ void Bone2D::_notification(int p_what) {
 		if (skeleton) {
 			for (int i = 0; i < skeleton->bones.size(); i++) {
 				if (skeleton->bones[i].bone == this) {
-					skeleton->bones.remove(i);
+					skeleton->bones.remove_at(i);
 					break;
 				}
 			}
@@ -456,7 +456,7 @@ void Bone2D::calculate_length_and_rotation() {
 			if (child) {
 				Vector2 child_local_pos = to_local(child->get_global_position());
 				length = child_local_pos.length();
-				bone_angle = Math::atan2(child_local_pos.normalized().y, child_local_pos.normalized().x);
+				bone_angle = child_local_pos.normalized().angle();
 				calculated = true;
 				break;
 			}

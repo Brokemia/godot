@@ -42,12 +42,16 @@
 #include "core/os/thread.h"
 #include "core/templates/safe_refcount.h"
 
-class _ResourceLoader : public Object {
-	GDCLASS(_ResourceLoader, Object);
+class MainLoop;
+
+namespace core_bind {
+
+class ResourceLoader : public Object {
+	GDCLASS(ResourceLoader, Object);
 
 protected:
 	static void _bind_methods();
-	static _ResourceLoader *singleton;
+	static ResourceLoader *singleton;
 
 public:
 	enum ThreadLoadStatus {
@@ -63,7 +67,7 @@ public:
 		CACHE_MODE_REPLACE, // Resource and subresource use path cache, but replace existing loaded resources when available with information from disk.
 	};
 
-	static _ResourceLoader *get_singleton() { return singleton; }
+	static ResourceLoader *get_singleton() { return singleton; }
 
 	Error load_threaded_request(const String &p_path, const String &p_type_hint = "", bool p_use_sub_threads = false);
 	ThreadLoadStatus load_threaded_get_status(const String &p_path, Array r_progress = Array());
@@ -77,18 +81,15 @@ public:
 	bool exists(const String &p_path, const String &p_type_hint = "");
 	ResourceUID::ID get_resource_uid(const String &p_path);
 
-	_ResourceLoader() { singleton = this; }
+	ResourceLoader() { singleton = this; }
 };
 
-VARIANT_ENUM_CAST(_ResourceLoader::ThreadLoadStatus);
-VARIANT_ENUM_CAST(_ResourceLoader::CacheMode);
-
-class _ResourceSaver : public Object {
-	GDCLASS(_ResourceSaver, Object);
+class ResourceSaver : public Object {
+	GDCLASS(ResourceSaver, Object);
 
 protected:
 	static void _bind_methods();
-	static _ResourceSaver *singleton;
+	static ResourceSaver *singleton;
 
 public:
 	enum SaverFlags {
@@ -101,29 +102,25 @@ public:
 		FLAG_REPLACE_SUBRESOURCE_PATHS = 64,
 	};
 
-	static _ResourceSaver *get_singleton() { return singleton; }
+	static ResourceSaver *get_singleton() { return singleton; }
 
 	Error save(const String &p_path, const RES &p_resource, SaverFlags p_flags);
 	Vector<String> get_recognized_extensions(const RES &p_resource);
 
-	_ResourceSaver() { singleton = this; }
+	ResourceSaver() { singleton = this; }
 };
 
-VARIANT_ENUM_CAST(_ResourceSaver::SaverFlags);
-
-class MainLoop;
-
-class _OS : public Object {
-	GDCLASS(_OS, Object);
+class OS : public Object {
+	GDCLASS(OS, Object);
 
 protected:
 	static void _bind_methods();
-	static _OS *singleton;
+	static OS *singleton;
 
 public:
 	enum VideoDriver {
-		VIDEO_DRIVER_GLES2,
 		VIDEO_DRIVER_VULKAN,
+		VIDEO_DRIVER_OPENGL_3,
 	};
 
 	enum Weekday {
@@ -164,10 +161,12 @@ public:
 	int get_low_processor_usage_mode_sleep_usec() const;
 
 	void alert(const String &p_alert, const String &p_title = "ALERT!");
+	void crash(const String &p_message);
 
 	String get_executable_path() const;
 	int execute(const String &p_path, const Vector<String> &p_arguments, Array r_output = Array(), bool p_read_stderr = false);
 	int create_process(const String &p_path, const Vector<String> &p_arguments);
+	int create_instance(const Vector<String> &p_arguments);
 	Error kill(int p_pid);
 	Error shell_open(String p_uri);
 
@@ -181,6 +180,7 @@ public:
 	Vector<String> get_cmdline_args();
 
 	String get_locale() const;
+	String get_locale_language() const;
 
 	String get_model_name() const;
 
@@ -196,9 +196,9 @@ public:
 
 	String get_unique_id() const;
 
-	String get_keycode_string(uint32_t p_code) const;
-	bool is_keycode_unicode(uint32_t p_unicode) const;
-	int find_keycode_from_string(const String &p_code) const;
+	String get_keycode_string(Key p_code) const;
+	bool is_keycode_unicode(char32_t p_unicode) const;
+	Key find_keycode_from_string(const String &p_code) const;
 
 	void set_use_file_access_save_and_swap(bool p_enable);
 
@@ -207,7 +207,7 @@ public:
 
 	void delay_usec(int p_usec) const;
 	void delay_msec(int p_msec) const;
-	uint32_t get_ticks_msec() const;
+	uint64_t get_ticks_msec() const;
 	uint64_t get_ticks_usec() const;
 
 	bool can_use_threads() const;
@@ -229,16 +229,16 @@ public:
 		SYSTEM_DIR_RINGTONES,
 	};
 
-	String get_system_dir(SystemDir p_dir) const;
+	String get_system_dir(SystemDir p_dir, bool p_shared_storage = true) const;
 
 	String get_user_data_dir() const;
-	String get_external_data_dir() const;
 	String get_config_dir() const;
 	String get_data_dir() const;
 	String get_cache_dir() const;
 
 	Error set_thread_name(const String &p_name);
 	Thread::ID get_thread_caller_id() const;
+	Thread::ID get_main_thread_id() const;
 
 	bool has_feature(const String &p_feature) const;
 
@@ -246,26 +246,21 @@ public:
 	bool request_permissions();
 	Vector<String> get_granted_permissions() const;
 
-	static _OS *get_singleton() { return singleton; }
+	static OS *get_singleton() { return singleton; }
 
-	_OS() { singleton = this; }
+	OS() { singleton = this; }
 };
 
-VARIANT_ENUM_CAST(_OS::VideoDriver);
-VARIANT_ENUM_CAST(_OS::Weekday);
-VARIANT_ENUM_CAST(_OS::Month);
-VARIANT_ENUM_CAST(_OS::SystemDir);
+class Geometry2D : public Object {
+	GDCLASS(Geometry2D, Object);
 
-class _Geometry2D : public Object {
-	GDCLASS(_Geometry2D, Object);
-
-	static _Geometry2D *singleton;
+	static Geometry2D *singleton;
 
 protected:
 	static void _bind_methods();
 
 public:
-	static _Geometry2D *get_singleton();
+	static Geometry2D *get_singleton();
 	Variant segment_intersects_segment(const Vector2 &p_from_a, const Vector2 &p_to_a, const Vector2 &p_from_b, const Vector2 &p_to_b);
 	Variant line_intersects_line(const Vector2 &p_from_a, const Vector2 &p_dir_a, const Vector2 &p_from_b, const Vector2 &p_dir_b);
 	Vector<Vector2> get_closest_points_between_segments(const Vector2 &p1, const Vector2 &q1, const Vector2 &p2, const Vector2 &q2);
@@ -316,23 +311,19 @@ public:
 
 	Dictionary make_atlas(const Vector<Size2> &p_rects);
 
-	_Geometry2D() { singleton = this; }
+	Geometry2D() { singleton = this; }
 };
 
-VARIANT_ENUM_CAST(_Geometry2D::PolyBooleanOperation);
-VARIANT_ENUM_CAST(_Geometry2D::PolyJoinType);
-VARIANT_ENUM_CAST(_Geometry2D::PolyEndType);
+class Geometry3D : public Object {
+	GDCLASS(Geometry3D, Object);
 
-class _Geometry3D : public Object {
-	GDCLASS(_Geometry3D, Object);
-
-	static _Geometry3D *singleton;
+	static Geometry3D *singleton;
 
 protected:
 	static void _bind_methods();
 
 public:
-	static _Geometry3D *get_singleton();
+	static Geometry3D *get_singleton();
 	Vector<Plane> build_box_planes(const Vector3 &p_extents);
 	Vector<Plane> build_cylinder_planes(float p_radius, float p_height, int p_sides, Vector3::Axis p_axis = Vector3::AXIS_Z);
 	Vector<Plane> build_capsule_planes(float p_radius, float p_height, int p_sides, int p_lats, Vector3::Axis p_axis = Vector3::AXIS_Z);
@@ -348,11 +339,11 @@ public:
 
 	Vector<Vector3> clip_polygon(const Vector<Vector3> &p_points, const Plane &p_plane);
 
-	_Geometry3D() { singleton = this; }
+	Geometry3D() { singleton = this; }
 };
 
-class _File : public RefCounted {
-	GDCLASS(_File, RefCounted);
+class File : public RefCounted {
+	GDCLASS(File, RefCounted);
 
 	FileAccess *f = nullptr;
 	bool big_endian = false;
@@ -446,17 +437,17 @@ public:
 
 	uint64_t get_modified_time(const String &p_file) const;
 
-	_File() {}
-	virtual ~_File();
+	File() {}
+	virtual ~File();
 };
 
-VARIANT_ENUM_CAST(_File::ModeFlags);
-VARIANT_ENUM_CAST(_File::CompressionMode);
-
-class _Directory : public RefCounted {
-	GDCLASS(_Directory, RefCounted);
+class Directory : public RefCounted {
+	GDCLASS(Directory, RefCounted);
 	DirAccess *d;
+
 	bool dir_open = false;
+	bool include_navigational = false;
+	bool include_hidden = false;
 
 protected:
 	static void _bind_methods();
@@ -466,11 +457,19 @@ public:
 
 	bool is_open() const;
 
-	Error list_dir_begin(bool p_show_navigational = false, bool p_show_hidden = false); // This starts dir listing.
+	Error list_dir_begin();
 	String get_next();
 	bool current_is_dir() const;
-
 	void list_dir_end();
+
+	PackedStringArray get_files();
+	PackedStringArray get_directories();
+	PackedStringArray _get_contents(bool p_directories);
+
+	void set_include_navigational(bool p_enable);
+	bool get_include_navigational() const;
+	void set_include_hidden(bool p_enable);
+	bool get_include_hidden() const;
 
 	int get_drive_count();
 	String get_drive(int p_drive);
@@ -491,24 +490,20 @@ public:
 	Error rename(String p_from, String p_to);
 	Error remove(String p_name);
 
-	_Directory();
-	virtual ~_Directory();
-
-private:
-	bool _list_skip_navigational = false;
-	bool _list_skip_hidden = false;
+	Directory();
+	virtual ~Directory();
 };
 
-class _Marshalls : public Object {
-	GDCLASS(_Marshalls, Object);
+class Marshalls : public Object {
+	GDCLASS(Marshalls, Object);
 
-	static _Marshalls *singleton;
+	static Marshalls *singleton;
 
 protected:
 	static void _bind_methods();
 
 public:
-	static _Marshalls *get_singleton();
+	static Marshalls *get_singleton();
 
 	String variant_to_base64(const Variant &p_var, bool p_full_objects = false);
 	Variant base64_to_variant(const String &p_str, bool p_allow_objects = false);
@@ -519,13 +514,13 @@ public:
 	String utf8_to_base64(const String &p_str);
 	String base64_to_utf8(const String &p_str);
 
-	_Marshalls() { singleton = this; }
-	~_Marshalls() { singleton = nullptr; }
+	Marshalls() { singleton = this; }
+	~Marshalls() { singleton = nullptr; }
 };
 
-class _Mutex : public RefCounted {
-	GDCLASS(_Mutex, RefCounted);
-	Mutex mutex;
+class Mutex : public RefCounted {
+	GDCLASS(Mutex, RefCounted);
+	::Mutex mutex;
 
 	static void _bind_methods();
 
@@ -535,9 +530,9 @@ public:
 	void unlock();
 };
 
-class _Semaphore : public RefCounted {
-	GDCLASS(_Semaphore, RefCounted);
-	Semaphore semaphore;
+class Semaphore : public RefCounted {
+	GDCLASS(Semaphore, RefCounted);
+	::Semaphore semaphore;
 
 	static void _bind_methods();
 
@@ -547,16 +542,15 @@ public:
 	void post();
 };
 
-class _Thread : public RefCounted {
-	GDCLASS(_Thread, RefCounted);
+class Thread : public RefCounted {
+	GDCLASS(Thread, RefCounted);
 
 protected:
 	Variant ret;
 	Variant userdata;
-	SafeFlag active;
-	Object *target_instance = nullptr;
-	StringName target_method;
-	Thread thread;
+	SafeFlag running;
+	Callable target_callable;
+	::Thread thread;
 	static void _bind_methods();
 	static void _start_func(void *ud);
 
@@ -568,16 +562,17 @@ public:
 		PRIORITY_MAX
 	};
 
-	Error start(Object *p_instance, const StringName &p_method, const Variant &p_userdata = Variant(), Priority p_priority = PRIORITY_NORMAL);
+	Error start(const Callable &p_callable, const Variant &p_userdata = Variant(), Priority p_priority = PRIORITY_NORMAL);
 	String get_id() const;
-	bool is_active() const;
+	bool is_started() const;
+	bool is_alive() const;
 	Variant wait_to_finish();
 };
 
-VARIANT_ENUM_CAST(_Thread::Priority);
+namespace special {
 
-class _ClassDB : public Object {
-	GDCLASS(_ClassDB, Object);
+class ClassDB : public Object {
+	GDCLASS(ClassDB, Object);
 
 protected:
 	static void _bind_methods();
@@ -608,21 +603,28 @@ public:
 	int get_integer_constant(const StringName &p_class, const StringName &p_name) const;
 	StringName get_category(const StringName &p_node) const;
 
+	bool has_enum(const StringName &p_class, const StringName &p_name, bool p_no_inheritance = false) const;
+	PackedStringArray get_enum_list(const StringName &p_class, bool p_no_inheritance = false) const;
+	PackedStringArray get_enum_constants(const StringName &p_class, const StringName &p_enum, bool p_no_inheritance = false) const;
+	StringName get_integer_constant_enum(const StringName &p_class, const StringName &p_name, bool p_no_inheritance = false) const;
+
 	bool is_class_enabled(StringName p_class) const;
 
-	_ClassDB() {}
-	~_ClassDB() {}
+	ClassDB() {}
+	~ClassDB() {}
 };
 
-class _Engine : public Object {
-	GDCLASS(_Engine, Object);
+} // namespace special
+
+class Engine : public Object {
+	GDCLASS(Engine, Object);
 
 protected:
 	static void _bind_methods();
-	static _Engine *singleton;
+	static Engine *singleton;
 
 public:
-	static _Engine *get_singleton() { return singleton; }
+	static Engine *get_singleton() { return singleton; }
 	void set_physics_ticks_per_second(int p_ips);
 	int get_physics_ticks_per_second() const;
 
@@ -653,8 +655,11 @@ public:
 
 	bool is_in_physics_frame() const;
 
-	bool has_singleton(const String &p_name) const;
-	Object *get_singleton_object(const String &p_name) const;
+	bool has_singleton(const StringName &p_name) const;
+	Object *get_singleton_object(const StringName &p_name) const;
+	void register_singleton(const StringName &p_name, Object *p_object);
+	void unregister_singleton(const StringName &p_name);
+	Vector<String> get_singleton_list() const;
 
 	void set_editor_hint(bool p_enabled);
 	bool is_editor_hint() const;
@@ -662,14 +667,14 @@ public:
 	void set_print_error_messages(bool p_enabled);
 	bool is_printing_error_messages() const;
 
-	_Engine() { singleton = this; }
+	Engine() { singleton = this; }
 };
 
-class _EngineDebugger : public Object {
-	GDCLASS(_EngineDebugger, Object);
+class EngineDebugger : public Object {
+	GDCLASS(EngineDebugger, Object);
 
 	class ProfilerCallable {
-		friend class _EngineDebugger;
+		friend class EngineDebugger;
 
 		Callable callable_toggle;
 		Callable callable_add;
@@ -690,10 +695,10 @@ class _EngineDebugger : public Object {
 
 protected:
 	static void _bind_methods();
-	static _EngineDebugger *singleton;
+	static EngineDebugger *singleton;
 
 public:
-	static _EngineDebugger *get_singleton() { return singleton; }
+	static EngineDebugger *get_singleton() { return singleton; }
 
 	bool is_active();
 
@@ -715,8 +720,29 @@ public:
 	static void call_tick(void *p_user, double p_frame_time, double p_idle_time, double p_physics_time, double p_physics_frame_time);
 	static Error call_capture(void *p_user, const String &p_cmd, const Array &p_data, bool &r_captured);
 
-	_EngineDebugger() { singleton = this; }
-	~_EngineDebugger();
+	EngineDebugger() { singleton = this; }
+	~EngineDebugger();
 };
+
+} // namespace core_bind
+
+VARIANT_ENUM_CAST(core_bind::ResourceLoader::ThreadLoadStatus);
+VARIANT_ENUM_CAST(core_bind::ResourceLoader::CacheMode);
+
+VARIANT_ENUM_CAST(core_bind::ResourceSaver::SaverFlags);
+
+VARIANT_ENUM_CAST(core_bind::OS::VideoDriver);
+VARIANT_ENUM_CAST(core_bind::OS::Weekday);
+VARIANT_ENUM_CAST(core_bind::OS::Month);
+VARIANT_ENUM_CAST(core_bind::OS::SystemDir);
+
+VARIANT_ENUM_CAST(core_bind::Geometry2D::PolyBooleanOperation);
+VARIANT_ENUM_CAST(core_bind::Geometry2D::PolyJoinType);
+VARIANT_ENUM_CAST(core_bind::Geometry2D::PolyEndType);
+
+VARIANT_ENUM_CAST(core_bind::File::ModeFlags);
+VARIANT_ENUM_CAST(core_bind::File::CompressionMode);
+
+VARIANT_ENUM_CAST(core_bind::Thread::Priority);
 
 #endif // CORE_BIND_H

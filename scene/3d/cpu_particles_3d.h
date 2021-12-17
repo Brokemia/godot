@@ -91,6 +91,7 @@ private:
 		real_t scale_rand = 0.0;
 		real_t hue_rot_rand = 0.0;
 		real_t anim_offset_rand = 0.0;
+		Color start_color_rand;
 		double time = 0.0;
 		double lifetime = 0.0;
 		Color base_color;
@@ -154,12 +155,13 @@ private:
 	real_t spread = 45.0;
 	real_t flatness = 0.0;
 
-	real_t parameters[PARAM_MAX];
-	real_t randomness[PARAM_MAX] = {};
+	real_t parameters_min[PARAM_MAX];
+	real_t parameters_max[PARAM_MAX] = {};
 
 	Ref<Curve> curve_parameters[PARAM_MAX];
 	Color color = Color(1, 1, 1, 1);
 	Ref<Gradient> color_ramp;
+	Ref<Gradient> color_initial_ramp;
 
 	bool particle_flags[PARTICLE_FLAG_MAX] = {};
 
@@ -174,6 +176,11 @@ private:
 	real_t emission_ring_height;
 	real_t emission_ring_radius;
 	real_t emission_ring_inner_radius;
+
+	Ref<Curve> scale_curve_x;
+	Ref<Curve> scale_curve_y;
+	Ref<Curve> scale_curve_z;
+	bool split_scale = false;
 
 	Vector3 gravity = Vector3(0, -9.8, 0);
 
@@ -204,7 +211,6 @@ public:
 	void set_explosiveness_ratio(real_t p_ratio);
 	void set_randomness_ratio(real_t p_ratio);
 	void set_lifetime_randomness(double p_random);
-	void set_visibility_aabb(const AABB &p_aabb);
 	void set_use_local_coordinates(bool p_enable);
 	void set_speed_scale(double p_scale);
 
@@ -216,7 +222,6 @@ public:
 	real_t get_explosiveness_ratio() const;
 	real_t get_randomness_ratio() const;
 	double get_lifetime_randomness() const;
-	AABB get_visibility_aabb() const;
 	bool get_use_local_coordinates() const;
 	double get_speed_scale() const;
 
@@ -228,9 +233,6 @@ public:
 
 	void set_draw_order(DrawOrder p_order);
 	DrawOrder get_draw_order() const;
-
-	void set_draw_passes(int p_count);
-	int get_draw_passes() const;
 
 	void set_mesh(const Ref<Mesh> &p_mesh);
 	Ref<Mesh> get_mesh() const;
@@ -246,11 +248,11 @@ public:
 	void set_flatness(real_t p_flatness);
 	real_t get_flatness() const;
 
-	void set_param(Parameter p_param, real_t p_value);
-	real_t get_param(Parameter p_param) const;
+	void set_param_min(Parameter p_param, real_t p_value);
+	real_t get_param_min(Parameter p_param) const;
 
-	void set_param_randomness(Parameter p_param, real_t p_value);
-	real_t get_param_randomness(Parameter p_param) const;
+	void set_param_max(Parameter p_param, real_t p_value);
+	real_t get_param_max(Parameter p_param) const;
 
 	void set_param_curve(Parameter p_param, const Ref<Curve> &p_curve);
 	Ref<Curve> get_param_curve(Parameter p_param) const;
@@ -261,6 +263,9 @@ public:
 	void set_color_ramp(const Ref<Gradient> &p_ramp);
 	Ref<Gradient> get_color_ramp() const;
 
+	void set_color_initial_ramp(const Ref<Gradient> &p_ramp);
+	Ref<Gradient> get_color_initial_ramp() const;
+
 	void set_particle_flag(ParticleFlags p_particle_flag, bool p_enable);
 	bool get_particle_flag(ParticleFlags p_particle_flag) const;
 
@@ -270,11 +275,14 @@ public:
 	void set_emission_points(const Vector<Vector3> &p_points);
 	void set_emission_normals(const Vector<Vector3> &p_normals);
 	void set_emission_colors(const Vector<Color> &p_colors);
-	void set_emission_point_count(int p_count);
 	void set_emission_ring_axis(Vector3 p_axis);
 	void set_emission_ring_height(real_t p_height);
 	void set_emission_ring_radius(real_t p_radius);
 	void set_emission_ring_inner_radius(real_t p_radius);
+	void set_scale_curve_x(Ref<Curve> p_scale_curve);
+	void set_scale_curve_y(Ref<Curve> p_scale_curve);
+	void set_scale_curve_z(Ref<Curve> p_scale_curve);
+	void set_split_scale(bool p_split_scale);
 
 	EmissionShape get_emission_shape() const;
 	real_t get_emission_sphere_radius() const;
@@ -282,11 +290,14 @@ public:
 	Vector<Vector3> get_emission_points() const;
 	Vector<Vector3> get_emission_normals() const;
 	Vector<Color> get_emission_colors() const;
-	int get_emission_point_count() const;
 	Vector3 get_emission_ring_axis() const;
 	real_t get_emission_ring_height() const;
 	real_t get_emission_ring_radius() const;
 	real_t get_emission_ring_inner_radius() const;
+	Ref<Curve> get_scale_curve_x() const;
+	Ref<Curve> get_scale_curve_y() const;
+	Ref<Curve> get_scale_curve_z() const;
+	bool get_split_scale();
 
 	void set_gravity(const Vector3 &p_gravity);
 	Vector3 get_gravity() const;

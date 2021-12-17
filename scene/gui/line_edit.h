@@ -38,13 +38,6 @@ class LineEdit : public Control {
 	GDCLASS(LineEdit, Control);
 
 public:
-	enum Align {
-		ALIGN_LEFT,
-		ALIGN_CENTER,
-		ALIGN_RIGHT,
-		ALIGN_FILL
-	};
-
 	enum MenuItems {
 		MENU_CUT,
 		MENU_COPY,
@@ -78,7 +71,7 @@ public:
 	};
 
 private:
-	Align align = ALIGN_LEFT;
+	HorizontalAlignment alignment = HORIZONTAL_ALIGNMENT_LEFT;
 
 	bool editable = false;
 	bool pass = false;
@@ -97,6 +90,7 @@ private:
 	float full_width = 0.0;
 
 	bool selecting_enabled = true;
+	bool deselect_on_focus_loss_enabled = true;
 
 	bool context_menu_enabled = true;
 	PopupMenu *menu = nullptr;
@@ -126,7 +120,13 @@ private:
 
 	bool virtual_keyboard_enabled = true;
 
+	bool middle_mouse_paste_enabled = true;
+
+	bool drag_action = false;
+	bool drag_caret_force_displayed = false;
+
 	Ref<Texture2D> right_icon;
+	bool flat = false;
 
 	struct Selection {
 		int begin = 0;
@@ -136,7 +136,6 @@ private:
 		bool creating = false;
 		bool double_click = false;
 		bool drag_attempt = false;
-		uint64_t last_dblclk = 0;
 	} selection;
 
 	struct TextOperation {
@@ -153,6 +152,9 @@ private:
 		bool pressing_inside = false;
 	} clear_button_status;
 
+	uint64_t last_dblclk = 0;
+	Vector2 last_dblclk_pos;
+
 	bool caret_blink_enabled = false;
 	bool caret_force_displayed = false;
 	bool draw_caret = true;
@@ -164,7 +166,7 @@ private:
 	void _clear_redo();
 	void _create_undo_state();
 
-	int _get_menu_action_accelerator(const String &p_action);
+	Key _get_menu_action_accelerator(const String &p_action);
 
 	void _shape();
 	void _fit_to_width();
@@ -185,7 +187,6 @@ private:
 	void _toggle_draw_caret();
 
 	void clear_internal();
-	void changed_internal();
 
 	void _editor_settings_changed();
 
@@ -202,7 +203,7 @@ private:
 protected:
 	void _notification(int p_what);
 	static void _bind_methods();
-	void _gui_input(Ref<InputEvent> p_event);
+	virtual void gui_input(const Ref<InputEvent> &p_event) override;
 
 	bool _set(const StringName &p_name, const Variant &p_value);
 	bool _get(const StringName &p_name, Variant &r_ret) const;
@@ -210,8 +211,8 @@ protected:
 	void _validate_property(PropertyInfo &property) const override;
 
 public:
-	void set_align(Align p_align);
-	Align get_align() const;
+	void set_horizontal_alignment(HorizontalAlignment p_alignment);
+	HorizontalAlignment get_horizontal_alignment() const;
 
 	virtual Variant get_drag_data(const Point2 &p_point) override;
 	virtual bool can_drop_data(const Point2 &p_point, const Variant &p_data) const override;
@@ -229,6 +230,9 @@ public:
 	void select_all();
 	void selection_delete();
 	void deselect();
+	bool has_selection() const;
+	int get_selection_from_column() const;
+	int get_selection_to_column() const;
 
 	void delete_char();
 	void delete_text(int p_from_column, int p_to_column);
@@ -285,6 +289,8 @@ public:
 	void copy_text();
 	void cut_text();
 	void paste_text();
+	bool has_undo() const;
+	bool has_redo() const;
 	void undo();
 	void redo();
 
@@ -311,11 +317,20 @@ public:
 	void set_virtual_keyboard_enabled(bool p_enable);
 	bool is_virtual_keyboard_enabled() const;
 
+	void set_middle_mouse_paste_enabled(bool p_enabled);
+	bool is_middle_mouse_paste_enabled() const;
+
 	void set_selecting_enabled(bool p_enabled);
 	bool is_selecting_enabled() const;
 
+	void set_deselect_on_focus_loss_enabled(const bool p_enabled);
+	bool is_deselect_on_focus_loss_enabled() const;
+
 	void set_right_icon(const Ref<Texture2D> &p_icon);
 	Ref<Texture2D> get_right_icon();
+
+	void set_flat(bool p_enabled);
+	bool is_flat() const;
 
 	virtual bool is_text_field() const override;
 
@@ -325,7 +340,6 @@ public:
 	~LineEdit();
 };
 
-VARIANT_ENUM_CAST(LineEdit::Align);
 VARIANT_ENUM_CAST(LineEdit::MenuItems);
 
 #endif

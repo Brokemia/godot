@@ -8,8 +8,6 @@
 	</description>
 	<tutorials>
 	</tutorials>
-	<methods>
-	</methods>
 	<members>
 		<member name="operator" type="int" setter="set_operator" getter="get_operator" enum="VisualShaderNodeTransformOp.Operator" default="0">
 			The type of the operation to be performed on the transforms. See [enum Operator] for options.
@@ -43,7 +41,7 @@
 		<constant name="OP_B_DIV_A" value="8" enum="Operator">
 			Divides the transform [code]b[/code] by the transform [code]a[/code].
 		</constant>
-		<constant name="OP_LIMITER" value="9" enum="Operator">
+		<constant name="OP_MAX" value="9" enum="Operator">
 			Represents the size of the [enum Operator] enum.
 		</constant>
 	</constants>

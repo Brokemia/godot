@@ -44,6 +44,31 @@ const String godot_project_name_xml_string = R"(<?xml version="1.0" encoding="ut
 </resources>
 )";
 
+// Supported XR modes.
+// This should match the entries in 'platform/android/java/lib/src/org/godotengine/godot/xr/XRMode.java'
+static const int XR_MODE_REGULAR = 0;
+static const int XR_MODE_OPENXR = 1;
+
+// Supported XR hand tracking modes.
+static const int XR_HAND_TRACKING_NONE = 0;
+static const int XR_HAND_TRACKING_OPTIONAL = 1;
+static const int XR_HAND_TRACKING_REQUIRED = 2;
+
+// Supported XR hand tracking frequencies.
+static const int XR_HAND_TRACKING_FREQUENCY_LOW = 0;
+static const int XR_HAND_TRACKING_FREQUENCY_HIGH = 1;
+
+// Supported XR passthrough modes.
+static const int XR_PASSTHROUGH_NONE = 0;
+static const int XR_PASSTHROUGH_OPTIONAL = 1;
+static const int XR_PASSTHROUGH_REQUIRED = 2;
+
+struct CustomExportData {
+	String assets_directory;
+	bool debug;
+	Vector<String> libs;
+};
+
 int _get_android_orientation_value(DisplayServer::ScreenOrientation screen_orientation);
 
 String _get_android_orientation_label(DisplayServer::ScreenOrientation screen_orientation);
@@ -81,6 +106,6 @@ String _get_instrumentation_tag(const Ref<EditorExportPreset> &p_preset);
 
 String _get_activity_tag(const Ref<EditorExportPreset> &p_preset);
 
-String _get_application_tag(const Ref<EditorExportPreset> &p_preset);
+String _get_application_tag(const Ref<EditorExportPreset> &p_preset, bool p_has_storage_permission);
 
 #endif //GODOT_GRADLE_EXPORT_UTIL_H

@@ -37,7 +37,7 @@
 #include "scene/gui/center_container.h"
 #include "scene/resources/font.h"
 
-void EditorLog::_error_handler(void *p_self, const char *p_func, const char *p_file, int p_line, const char *p_error, const char *p_errorexp, ErrorHandlerType p_type) {
+void EditorLog::_error_handler(void *p_self, const char *p_func, const char *p_file, int p_line, const char *p_error, const char *p_errorexp, bool p_editor_notify, ErrorHandlerType p_type) {
 	EditorLog *self = (EditorLog *)p_self;
 	if (self->current != Thread::get_caller_id()) {
 		return;
@@ -45,9 +45,13 @@ void EditorLog::_error_handler(void *p_self, const char *p_func, const char *p_f
 
 	String err_str;
 	if (p_errorexp && p_errorexp[0]) {
-		err_str = p_errorexp;
+		err_str = String::utf8(p_errorexp);
 	} else {
-		err_str = String(p_file) + ":" + itos(p_line) + " - " + String(p_error);
+		err_str = String::utf8(p_file) + ":" + itos(p_line) + " - " + String::utf8(p_error);
+	}
+
+	if (p_editor_notify) {
+		err_str += " (User)";
 	}
 
 	if (p_type == ERR_HANDLER_WARNING) {
@@ -116,8 +120,8 @@ void EditorLog::_save_state() {
 	config->load(EditorSettings::get_singleton()->get_project_settings_dir().plus_file("editor_layout.cfg"));
 
 	const String section = "editor_log";
-	for (Map<MessageType, LogFilter *>::Element *E = type_filter_map.front(); E; E = E->next()) {
-		config->set_value(section, "log_filter_" + itos(E->key()), E->get()->is_active());
+	for (const KeyValue<MessageType, LogFilter *> &E : type_filter_map) {
+		config->set_value(section, "log_filter_" + itos(E.key), E.value->is_active());
 	}
 
 	config->set_value(section, "collapse", collapse);
@@ -135,8 +139,8 @@ void EditorLog::_load_state() {
 
 	// Run the below code even if config->load returns an error, since we want the defaults to be set even if the file does not exist yet.
 	const String section = "editor_log";
-	for (Map<MessageType, LogFilter *>::Element *E = type_filter_map.front(); E; E = E->next()) {
-		E->get()->set_active(config->get_value(section, "log_filter_" + itos(E->key()), true));
+	for (const KeyValue<MessageType, LogFilter *> &E : type_filter_map) {
+		E.value->set_active(config->get_value(section, "log_filter_" + itos(E.key), true));
 	}
 
 	collapse = config->get_value(section, "collapse", false);
@@ -158,11 +162,11 @@ void EditorLog::_clear_request() {
 void EditorLog::_copy_request() {
 	String text = log->get_selected_text();
 
-	if (text == "") {
+	if (text.is_empty()) {
 		text = log->get_text();
 	}
 
-	if (text != "") {
+	if (!text.is_empty()) {
 		DisplayServer::get_singleton()->clipboard_set(text);
 	}
 }
@@ -195,7 +199,7 @@ void EditorLog::add_message(const String &p_msg, MessageType p_type) {
 	// get grouped together and sent to the editor log as one message. This can mess with the
 	// search functionality (see the comments on the PR above for more details). This behaviour
 	// also matches that of other IDE's.
-	Vector<String> lines = p_msg.split("\n", false);
+	Vector<String> lines = p_msg.split("\n", true);
 
 	for (int i = 0; i < lines.size(); i++) {
 		_process_message(lines[i], p_type);
@@ -233,7 +237,7 @@ void EditorLog::_add_log_line(LogMessage &p_message, bool p_replace_previous) {
 	// Only add the message to the log if it passes the filters.
 	bool filter_active = type_filter_map[p_message.type]->is_active();
 	String search_text = search_box->get_text();
-	bool search_match = search_text == String() || p_message.text.findn(search_text) > -1;
+	bool search_match = search_text.is_empty() || p_message.text.findn(search_text) > -1;
 
 	if (!filter_active || !search_match) {
 		return;
@@ -306,8 +310,8 @@ void EditorLog::_search_changed(const String &p_text) {
 }
 
 void EditorLog::_reset_message_counts() {
-	for (Map<MessageType, LogFilter *>::Element *E = type_filter_map.front(); E; E = E->next()) {
-		E->value()->set_message_count(0);
+	for (const KeyValue<MessageType, LogFilter *> &E : type_filter_map) {
+		E.value->set_message_count(0);
 	}
 }
 
@@ -362,7 +366,7 @@ EditorLog::EditorLog() {
 	clear_button = memnew(Button);
 	clear_button->set_flat(true);
 	clear_button->set_focus_mode(FOCUS_NONE);
-	clear_button->set_shortcut(ED_SHORTCUT("editor/clear_output", TTR("Clear Output"), KEY_MASK_CMD | KEY_MASK_SHIFT | KEY_K));
+	clear_button->set_shortcut(ED_SHORTCUT("editor/clear_output", TTR("Clear Output"), KeyModifierMask::CMD | KeyModifierMask::SHIFT | Key::K));
 	clear_button->set_shortcut_context(this);
 	clear_button->connect("pressed", callable_mp(this, &EditorLog::_clear_request));
 	hb_tools->add_child(clear_button);
@@ -371,7 +375,7 @@ EditorLog::EditorLog() {
 	copy_button = memnew(Button);
 	copy_button->set_flat(true);
 	copy_button->set_focus_mode(FOCUS_NONE);
-	copy_button->set_shortcut(ED_SHORTCUT("editor/copy_output", TTR("Copy Selection"), KEY_MASK_CMD | KEY_C));
+	copy_button->set_shortcut(ED_SHORTCUT("editor/copy_output", TTR("Copy Selection"), KeyModifierMask::CMD | Key::C));
 	copy_button->set_shortcut_context(this);
 	copy_button->connect("pressed", callable_mp(this, &EditorLog::_copy_request));
 	hb_tools->add_child(copy_button);
@@ -397,7 +401,7 @@ EditorLog::EditorLog() {
 	show_search_button->set_focus_mode(FOCUS_NONE);
 	show_search_button->set_toggle_mode(true);
 	show_search_button->set_pressed(true);
-	show_search_button->set_shortcut(ED_SHORTCUT("editor/open_search", TTR("Focus Search/Filter Bar"), KEY_MASK_CMD | KEY_F));
+	show_search_button->set_shortcut(ED_SHORTCUT("editor/open_search", TTR("Focus Search/Filter Bar"), KeyModifierMask::CMD | Key::F));
 	show_search_button->set_shortcut_context(this);
 	show_search_button->connect("toggled", callable_mp(this, &EditorLog::_set_search_visible));
 	hb_tools2->add_child(show_search_button);
@@ -441,7 +445,7 @@ void EditorLog::deinit() {
 }
 
 EditorLog::~EditorLog() {
-	for (Map<MessageType, LogFilter *>::Element *E = type_filter_map.front(); E; E = E->next()) {
-		memdelete(E->get());
+	for (const KeyValue<MessageType, LogFilter *> &E : type_filter_map) {
+		memdelete(E.value);
 	}
 }

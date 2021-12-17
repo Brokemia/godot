@@ -53,7 +53,7 @@ void ExportTemplateManager::_update_template_status() {
 	da->list_dir_begin();
 	if (err == OK) {
 		String c = da->get_next();
-		while (c != String()) {
+		while (!c.is_empty()) {
 			if (da->current_is_dir() && !c.begins_with(".")) {
 				templates.insert(c);
 			}
@@ -146,6 +146,11 @@ void ExportTemplateManager::_download_template(const String &p_url, bool p_skip_
 
 	download_templates->set_download_file(EditorPaths::get_singleton()->get_cache_dir().plus_file("tmp_templates.tpz"));
 	download_templates->set_use_threads(true);
+
+	const String proxy_host = EDITOR_DEF("network/http_proxy/host", "");
+	const int proxy_port = EDITOR_DEF("network/http_proxy/port", -1);
+	download_templates->set_http_proxy(proxy_host, proxy_port);
+	download_templates->set_https_proxy(proxy_host, proxy_port);
 
 	Error err = download_templates->request(p_url);
 	if (err != OK) {
@@ -424,7 +429,7 @@ bool ExportTemplateManager::_install_file_selected(const String &p_file, bool p_
 		ret = unzGoToNextFile(pkg);
 	}
 
-	if (version == String()) {
+	if (version.is_empty()) {
 		EditorNode::get_singleton()->show_warning(TTR("No version.txt found inside the export templates file."));
 		unzClose(pkg);
 		return false;
@@ -743,7 +748,7 @@ void ExportTemplateManager::_notification(int p_what) {
 			current_missing_label->add_theme_color_override("font_color", get_theme_color(SNAME("error_color"), SNAME("Editor")));
 			current_installed_label->add_theme_color_override("font_color", get_theme_color(SNAME("disabled_font_color"), SNAME("Editor")));
 
-			mirror_options_button->set_icon(get_theme_icon(SNAME("GuiTabMenu"), SNAME("EditorIcons")));
+			mirror_options_button->set_icon(get_theme_icon(SNAME("GuiTabMenuHl"), SNAME("EditorIcons")));
 		} break;
 
 		case NOTIFICATION_VISIBILITY_CHANGED: {
@@ -827,7 +832,7 @@ ExportTemplateManager::ExportTemplateManager() {
 	current_missing_label->set_theme_type_variation("HeaderSmall");
 
 	current_missing_label->set_h_size_flags(Control::SIZE_EXPAND_FILL);
-	current_missing_label->set_align(Label::ALIGN_RIGHT);
+	current_missing_label->set_horizontal_alignment(HORIZONTAL_ALIGNMENT_RIGHT);
 	current_missing_label->set_text(TTR("Export templates are missing. Download them or install from a file."));
 	current_hb->add_child(current_missing_label);
 
@@ -835,7 +840,7 @@ ExportTemplateManager::ExportTemplateManager() {
 	current_installed_label = memnew(Label);
 	current_installed_label->set_theme_type_variation("HeaderSmall");
 	current_installed_label->set_h_size_flags(Control::SIZE_EXPAND_FILL);
-	current_installed_label->set_align(Label::ALIGN_RIGHT);
+	current_installed_label->set_horizontal_alignment(HORIZONTAL_ALIGNMENT_RIGHT);
 	current_installed_label->set_text(TTR("Export templates are installed and ready to be used."));
 	current_hb->add_child(current_installed_label);
 	current_installed_label->hide();
@@ -909,7 +914,7 @@ ExportTemplateManager::ExportTemplateManager() {
 	}
 
 	HBoxContainer *install_file_hb = memnew(HBoxContainer);
-	install_file_hb->set_alignment(BoxContainer::ALIGN_END);
+	install_file_hb->set_alignment(BoxContainer::ALIGNMENT_END);
 	install_options_vb->add_child(install_file_hb);
 
 	install_file_button = memnew(Button);

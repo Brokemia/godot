@@ -160,8 +160,8 @@ public:
 	virtual void area_set_collision_layer(RID p_area, uint32_t p_layer) override;
 
 	virtual void area_set_monitorable(RID p_area, bool p_monitorable) override;
-	virtual void area_set_monitor_callback(RID p_area, Object *p_receiver, const StringName &p_method) override;
-	virtual void area_set_area_monitor_callback(RID p_area, Object *p_receiver, const StringName &p_method) override;
+	virtual void area_set_monitor_callback(RID p_area, const Callable &p_callback) override;
+	virtual void area_set_area_monitor_callback(RID p_area, const Callable &p_callback) override;
 	virtual void area_set_ray_pickable(RID p_area, bool p_enable) override;
 
 	/* RIGID BODY API */
@@ -265,7 +265,7 @@ public:
 	virtual void soft_body_set_space(RID p_body, RID p_space) override;
 	virtual RID soft_body_get_space(RID p_body) const override;
 
-	virtual void soft_body_set_mesh(RID p_body, const REF &p_mesh) override;
+	virtual void soft_body_set_mesh(RID p_body, RID p_mesh) override;
 
 	virtual AABB soft_body_get_bounds(RID p_body) const override;
 

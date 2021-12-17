@@ -176,7 +176,7 @@ Transform2D Camera2D::get_camera_transform() {
 
 	Rect2 screen_rect(-screen_offset + ret_camera_pos, screen_size * zoom);
 
-	if (!limit_smoothing_enabled) {
+	if (!smoothing_enabled || !limit_smoothing_enabled) {
 		if (screen_rect.position.x < limit[SIDE_LEFT]) {
 			screen_rect.position.x = limit[SIDE_LEFT];
 		}
@@ -198,7 +198,7 @@ Transform2D Camera2D::get_camera_transform() {
 		screen_rect.position += offset;
 	}
 
-	camera_screen_center = screen_rect.position + screen_rect.size * 0.5;
+	camera_screen_center = screen_rect.get_center();
 
 	Transform2D xform;
 	xform.scale_basis(zoom);
@@ -232,6 +232,7 @@ void Camera2D::_notification(int p_what) {
 
 		} break;
 		case NOTIFICATION_ENTER_TREE: {
+			ERR_FAIL_COND(!is_inside_tree());
 			if (custom_viewport && ObjectDB::get_instance(custom_viewport_id)) {
 				viewport = custom_viewport;
 			} else {
@@ -261,6 +262,7 @@ void Camera2D::_notification(int p_what) {
 				if (viewport && !(custom_viewport && !ObjectDB::get_instance(custom_viewport_id))) {
 					viewport->set_canvas_transform(Transform2D());
 					clear_current();
+					current = true;
 				}
 			}
 			remove_from_group(group_name);
@@ -659,7 +661,7 @@ bool Camera2D::is_margin_drawing_enabled() const {
 
 void Camera2D::_validate_property(PropertyInfo &property) const {
 	if (!smoothing_enabled && property.name == "smoothing_speed") {
-		property.usage = PROPERTY_USAGE_NOEDITOR;
+		property.usage = PROPERTY_USAGE_NO_EDITOR;
 	}
 }
 

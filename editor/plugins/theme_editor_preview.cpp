@@ -47,7 +47,7 @@ void ThemeEditorPreview::add_preview_overlay(Control *p_overlay) {
 
 void ThemeEditorPreview::_propagate_redraw(Control *p_at) {
 	p_at->notification(NOTIFICATION_THEME_CHANGED);
-	p_at->minimum_size_changed();
+	p_at->update_minimum_size();
 	p_at->update();
 	for (int i = 0; i < p_at->get_child_count(); i++) {
 		Control *a = Object::cast_to<Control>(p_at->get_child(i));
@@ -71,6 +71,9 @@ void ThemeEditorPreview::_preview_visibility_changed() {
 
 void ThemeEditorPreview::_picker_button_cbk() {
 	picker_overlay->set_visible(picker_button->is_pressed());
+	if (picker_button->is_pressed()) {
+		_reset_picker_overlay();
+	}
 }
 
 Control *ThemeEditorPreview::_find_hovered_control(Control *p_parent, Vector2 p_mouse_position) {
@@ -117,7 +120,7 @@ void ThemeEditorPreview::_draw_picker_overlay() {
 		}
 
 		Rect2 highlight_label_rect = highlight_rect;
-		highlight_label_rect.size = theme_cache.preview_picker_font->get_string_size(highlight_name);
+		highlight_label_rect.size = theme_cache.preview_picker_font->get_string_size(highlight_name, theme_cache.font_size);
 
 		int margin_top = theme_cache.preview_picker_label->get_margin(SIDE_TOP);
 		int margin_left = theme_cache.preview_picker_label->get_margin(SIDE_LEFT);
@@ -126,14 +129,14 @@ void ThemeEditorPreview::_draw_picker_overlay() {
 		highlight_label_rect.size.x += margin_left + margin_right;
 		highlight_label_rect.size.y += margin_top + margin_bottom;
 
-		highlight_label_rect.position.x = CLAMP(highlight_label_rect.position.x, 0.0, picker_overlay->get_size().width);
-		highlight_label_rect.position.y = CLAMP(highlight_label_rect.position.y, 0.0, picker_overlay->get_size().height);
+		highlight_label_rect.position = highlight_label_rect.position.clamp(Vector2(), picker_overlay->get_size());
+
 		picker_overlay->draw_style_box(theme_cache.preview_picker_label, highlight_label_rect);
 
 		Point2 label_pos = highlight_label_rect.position;
 		label_pos.y += highlight_label_rect.size.y - margin_bottom;
 		label_pos.x += margin_left;
-		picker_overlay->draw_string(theme_cache.preview_picker_font, label_pos, highlight_name);
+		picker_overlay->draw_string(theme_cache.preview_picker_font, label_pos, highlight_name, HORIZONTAL_ALIGNMENT_LEFT, -1, theme_cache.font_size);
 	}
 }
 
@@ -144,7 +147,7 @@ void ThemeEditorPreview::_gui_input_picker_overlay(const Ref<InputEvent> &p_even
 
 	Ref<InputEventMouseButton> mb = p_event;
 
-	if (mb.is_valid() && mb->is_pressed() && mb->get_button_index() == MOUSE_BUTTON_LEFT) {
+	if (mb.is_valid() && mb->is_pressed() && mb->get_button_index() == MouseButton::LEFT) {
 		if (hovered_control) {
 			StringName theme_type = hovered_control->get_theme_type_variation();
 			if (theme_type == StringName()) {
@@ -154,6 +157,7 @@ void ThemeEditorPreview::_gui_input_picker_overlay(const Ref<InputEvent> &p_even
 			emit_signal(SNAME("control_picked"), theme_type);
 			picker_button->set_pressed(false);
 			picker_overlay->set_visible(false);
+			return;
 		}
 	}
 
@@ -164,6 +168,9 @@ void ThemeEditorPreview::_gui_input_picker_overlay(const Ref<InputEvent> &p_even
 		hovered_control = _find_hovered_control(preview_content, mp);
 		picker_overlay->update();
 	}
+
+	// Forward input to the scroll container underneath to allow scrolling.
+	preview_container->gui_input(p_event);
 }
 
 void ThemeEditorPreview::_reset_picker_overlay() {
@@ -188,6 +195,7 @@ void ThemeEditorPreview::_notification(int p_what) {
 			theme_cache.preview_picker_overlay_color = get_theme_color(SNAME("preview_picker_overlay_color"), SNAME("ThemeEditor"));
 			theme_cache.preview_picker_label = get_theme_stylebox(SNAME("preview_picker_label"), SNAME("ThemeEditor"));
 			theme_cache.preview_picker_font = get_theme_font(SNAME("status_source"), SNAME("EditorFonts"));
+			theme_cache.font_size = get_theme_font_size(SNAME("font_size"), SNAME("EditorFonts"));
 		} break;
 		case NOTIFICATION_PROCESS: {
 			time_left -= get_process_delta_time();
@@ -219,9 +227,7 @@ ThemeEditorPreview::ThemeEditorPreview() {
 	preview_body->set_v_size_flags(SIZE_EXPAND_FILL);
 	add_child(preview_body);
 
-	ScrollContainer *preview_container = memnew(ScrollContainer);
-	preview_container->set_enable_v_scroll(true);
-	preview_container->set_enable_h_scroll(true);
+	preview_container = memnew(ScrollContainer);
 	preview_body->add_child(preview_container);
 
 	MarginContainer *preview_root = memnew(MarginContainer);
@@ -359,7 +365,7 @@ DefaultThemeEditorPreview::DefaultThemeEditorPreview() {
 	vhb->add_child(memnew(VSeparator));
 	VBoxContainer *hvb = memnew(VBoxContainer);
 	vhb->add_child(hvb);
-	hvb->set_alignment(BoxContainer::ALIGN_CENTER);
+	hvb->set_alignment(BoxContainer::ALIGNMENT_CENTER);
 	hvb->set_h_size_flags(SIZE_EXPAND_FILL);
 	hvb->add_child(memnew(HSlider));
 	HScrollBar *hsb = memnew(HScrollBar);

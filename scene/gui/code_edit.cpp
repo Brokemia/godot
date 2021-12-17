@@ -129,7 +129,7 @@ void CodeEdit::_notification(int p_what) {
 				}
 
 				const int scroll_width = code_completion_options_count > code_completion_max_lines ? code_completion_scroll_width : 0;
-				const int code_completion_base_width = font->get_string_size(code_completion_base).width;
+				const int code_completion_base_width = font->get_string_size(code_completion_base, font_size).width;
 				if (caret_pos.x - code_completion_base_width + code_completion_rect.size.width + scroll_width > get_size().width) {
 					code_completion_rect.position.x = get_size().width - code_completion_rect.size.width - scroll_width;
 				} else {
@@ -170,12 +170,12 @@ void CodeEdit::_notification(int p_what) {
 						if (code_completion_options[l].default_value.get_type() == Variant::COLOR) {
 							draw_rect(Rect2(Point2(code_completion_rect.position.x, icon_area.position.y), icon_area_size), (Color)code_completion_options[l].default_value);
 						}
-						tl->set_align(HALIGN_RIGHT);
+						tl->set_horizontal_alignment(HORIZONTAL_ALIGNMENT_RIGHT);
 					} else {
 						if (code_completion_options[l].default_value.get_type() == Variant::COLOR) {
 							draw_rect(Rect2(Point2(code_completion_rect.position.x + code_completion_rect.size.width - icon_area_size.x, icon_area.position.y), icon_area_size), (Color)code_completion_options[l].default_value);
 						}
-						tl->set_align(HALIGN_LEFT);
+						tl->set_horizontal_alignment(HORIZONTAL_ALIGNMENT_LEFT);
 					}
 					tl->draw(ci, title_pos, code_completion_options[l].font_color);
 				}
@@ -189,7 +189,7 @@ void CodeEdit::_notification(int p_what) {
 			}
 
 			/* Code hint */
-			if (caret_visible && code_hint != "" && (!code_completion_active || (code_completion_below != code_hint_draw_below))) {
+			if (caret_visible && !code_hint.is_empty() && (!code_completion_active || (code_completion_below != code_hint_draw_below))) {
 				const int font_height = font->get_height(font_size);
 				Ref<StyleBox> sb = get_theme_stylebox(SNAME("panel"), SNAME("TooltipPanel"));
 				Color font_color = get_theme_color(SNAME("font_color"), SNAME("TooltipLabel"));
@@ -227,17 +227,17 @@ void CodeEdit::_notification(int p_what) {
 						end = font->get_string_size(line.substr(0, line.rfind(String::chr(0xFFFF))), font_size).x;
 					}
 
-					Point2 round_ofs = hint_ofs + sb->get_offset() + Vector2(0, font->get_ascent() + font_height * i + yofs);
+					Point2 round_ofs = hint_ofs + sb->get_offset() + Vector2(0, font->get_ascent(font_size) + font_height * i + yofs);
 					round_ofs = round_ofs.round();
-					draw_string(font, round_ofs, line.replace(String::chr(0xFFFF), ""), HALIGN_LEFT, -1, font_size, font_color);
+					draw_string(font, round_ofs, line.replace(String::chr(0xFFFF), ""), HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, font_color);
 					if (end > 0) {
 						// Draw an underline for the currently edited function parameter.
-						const Vector2 b = hint_ofs + sb->get_offset() + Vector2(begin, font_height + font_height * i + line_spacing);
+						const Vector2 b = hint_ofs + sb->get_offset() + Vector2(begin, font_height + font_height * i + yofs);
 						draw_line(b, b + Vector2(end - begin, 0), font_color, 2);
 
 						// Draw a translucent text highlight as well.
 						const Rect2 highlight_rect = Rect2(
-								hint_ofs + sb->get_offset() + Vector2(begin, 0),
+								b - Vector2(0, font_height),
 								Vector2(end - begin, font_height));
 						draw_rect(highlight_rect, font_color * Color(1, 1, 1, 0.2));
 					}
@@ -248,7 +248,7 @@ void CodeEdit::_notification(int p_what) {
 	}
 }
 
-void CodeEdit::_gui_input(const Ref<InputEvent> &p_gui_input) {
+void CodeEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
 	Ref<InputEventMouseButton> mb = p_gui_input;
 
 	if (mb.is_valid()) {
@@ -263,19 +263,19 @@ void CodeEdit::_gui_input(const Ref<InputEvent> &p_gui_input) {
 			}
 
 			switch (mb->get_button_index()) {
-				case MOUSE_BUTTON_WHEEL_UP: {
+				case MouseButton::WHEEL_UP: {
 					if (code_completion_current_selected > 0) {
 						code_completion_current_selected--;
 						update();
 					}
 				} break;
-				case MOUSE_BUTTON_WHEEL_DOWN: {
+				case MouseButton::WHEEL_DOWN: {
 					if (code_completion_current_selected < code_completion_options.size() - 1) {
 						code_completion_current_selected++;
 						update();
 					}
 				} break;
-				case MOUSE_BUTTON_LEFT: {
+				case MouseButton::LEFT: {
 					code_completion_current_selected = CLAMP(code_completion_line_ofs + (mb->get_position().y - code_completion_rect.position.y) / get_line_height(), 0, code_completion_options.size() - 1);
 					if (mb->is_double_click()) {
 						confirm_code_completion();
@@ -296,11 +296,11 @@ void CodeEdit::_gui_input(const Ref<InputEvent> &p_gui_input) {
 				mpos.x = get_size().x - mpos.x;
 			}
 
-			Point2i pos = get_line_column_at_pos(Point2i(mpos.x, mpos.y));
+			Point2i pos = get_line_column_at_pos(mpos, false);
 			int line = pos.y;
 			int col = pos.x;
 
-			if (mb->get_button_index() == MOUSE_BUTTON_LEFT) {
+			if (line != -1 && mb->get_button_index() == MouseButton::LEFT) {
 				if (is_line_folded(line)) {
 					int wrap_index = get_line_wrap_index_at_column(line, col);
 					if (wrap_index == get_line_wrap_count(line)) {
@@ -314,18 +314,20 @@ void CodeEdit::_gui_input(const Ref<InputEvent> &p_gui_input) {
 				}
 			}
 		} else {
-			if (mb->get_button_index() == MOUSE_BUTTON_LEFT) {
-				if (mb->is_command_pressed() && symbol_lookup_word != String()) {
+			if (mb->get_button_index() == MouseButton::LEFT) {
+				if (mb->is_command_pressed() && !symbol_lookup_word.is_empty()) {
 					Vector2i mpos = mb->get_position();
 					if (is_layout_rtl()) {
 						mpos.x = get_size().x - mpos.x;
 					}
 
-					Point2i pos = get_line_column_at_pos(Point2i(mpos.x, mpos.y));
+					Point2i pos = get_line_column_at_pos(mpos, false);
 					int line = pos.y;
 					int col = pos.x;
 
-					emit_signal(SNAME("symbol_lookup"), symbol_lookup_word, line, col);
+					if (line != -1) {
+						emit_signal(SNAME("symbol_lookup"), symbol_lookup_word, line, col);
+					}
 					return;
 				}
 			}
@@ -340,7 +342,7 @@ void CodeEdit::_gui_input(const Ref<InputEvent> &p_gui_input) {
 		}
 
 		if (symbol_lookup_on_click_enabled) {
-			if (mm->is_command_pressed() && mm->get_button_mask() == 0 && !is_dragging_cursor()) {
+			if (mm->is_command_pressed() && mm->get_button_mask() == MouseButton::NONE && !is_dragging_cursor()) {
 				symbol_lookup_new_word = get_word_at_pos(mpos);
 				if (symbol_lookup_new_word != symbol_lookup_word) {
 					emit_signal(SNAME("symbol_validate"), symbol_lookup_new_word);
@@ -354,15 +356,15 @@ void CodeEdit::_gui_input(const Ref<InputEvent> &p_gui_input) {
 	Ref<InputEventKey> k = p_gui_input;
 	bool update_code_completion = false;
 	if (!k.is_valid()) {
-		TextEdit::_gui_input(p_gui_input);
+		TextEdit::gui_input(p_gui_input);
 		return;
 	}
 
 	/* Ctrl + Hover symbols */
 #ifdef OSX_ENABLED
-	if (k->get_keycode() == KEY_META) {
+	if (k->get_keycode() == Key::META) {
 #else
-	if (k->get_keycode() == KEY_CTRL) {
+	if (k->get_keycode() == Key::CTRL) {
 #endif
 		if (symbol_lookup_on_click_enabled) {
 			if (k->is_pressed() && !is_dragging_cursor()) {
@@ -378,7 +380,7 @@ void CodeEdit::_gui_input(const Ref<InputEvent> &p_gui_input) {
 	}
 
 	/* If a modifier has been pressed, and nothing else, return. */
-	if (!k->is_pressed() || k->get_keycode() == KEY_CTRL || k->get_keycode() == KEY_ALT || k->get_keycode() == KEY_SHIFT || k->get_keycode() == KEY_META) {
+	if (!k->is_pressed() || k->get_keycode() == Key::CTRL || k->get_keycode() == Key::ALT || k->get_keycode() == Key::SHIFT || k->get_keycode() == Key::META) {
 		return;
 	}
 
@@ -433,7 +435,7 @@ void CodeEdit::_gui_input(const Ref<InputEvent> &p_gui_input) {
 			return;
 		}
 		if (k->is_action("ui_end", true)) {
-			code_completion_current_selected = MIN(code_completion_options.size() - 1, code_completion_current_selected + code_completion_max_lines);
+			code_completion_current_selected = code_completion_options.size() - 1;
 			update();
 			accept_event();
 			return;
@@ -450,7 +452,7 @@ void CodeEdit::_gui_input(const Ref<InputEvent> &p_gui_input) {
 		}
 		if (k->is_action("ui_text_backspace", true)) {
 			backspace();
-			_filter_code_completion_candidates();
+			_filter_code_completion_candidates_impl();
 			accept_event();
 			return;
 		}
@@ -467,7 +469,7 @@ void CodeEdit::_gui_input(const Ref<InputEvent> &p_gui_input) {
 	}
 
 	/* MISC */
-	if (k->is_action("ui_cancel", true)) {
+	if (!code_hint.is_empty() && k->is_action("ui_cancel", true)) {
 		set_code_hint("");
 		accept_event();
 		return;
@@ -519,16 +521,16 @@ void CodeEdit::_gui_input(const Ref<InputEvent> &p_gui_input) {
 		set_code_hint("");
 	}
 
-	TextEdit::_gui_input(p_gui_input);
+	TextEdit::gui_input(p_gui_input);
 
 	if (update_code_completion) {
-		_filter_code_completion_candidates();
+		_filter_code_completion_candidates_impl();
 	}
 }
 
 /* General overrides */
 Control::CursorShape CodeEdit::get_cursor_shape(const Point2 &p_pos) const {
-	if (symbol_lookup_word != String()) {
+	if (!symbol_lookup_word.is_empty()) {
 		return CURSOR_POINTING_HAND;
 	}
 
@@ -536,11 +538,11 @@ Control::CursorShape CodeEdit::get_cursor_shape(const Point2 &p_pos) const {
 		return CURSOR_ARROW;
 	}
 
-	Point2i pos = get_line_column_at_pos(p_pos);
+	Point2i pos = get_line_column_at_pos(p_pos, false);
 	int line = pos.y;
 	int col = pos.x;
 
-	if (is_line_folded(line)) {
+	if (line != -1 && is_line_folded(line)) {
 		int wrap_index = get_line_wrap_index_at_column(line, col);
 		if (wrap_index == get_line_wrap_count(line)) {
 			int eol_icon_width = folded_eol_icon->get_width();
@@ -557,7 +559,7 @@ Control::CursorShape CodeEdit::get_cursor_shape(const Point2 &p_pos) const {
 /* Text manipulation */
 
 // Overridable actions
-void CodeEdit::_handle_unicode_input(const uint32_t p_unicode) {
+void CodeEdit::_handle_unicode_input_internal(const uint32_t p_unicode) {
 	bool had_selection = has_selection();
 	if (had_selection) {
 		begin_complex_operation();
@@ -609,8 +611,13 @@ void CodeEdit::_handle_unicode_input(const uint32_t p_unicode) {
 	}
 }
 
-void CodeEdit::_backspace() {
+void CodeEdit::_backspace_internal() {
 	if (!is_editable()) {
+		return;
+	}
+
+	if (has_selection()) {
+		delete_selection();
 		return;
 	}
 
@@ -618,11 +625,6 @@ void CodeEdit::_backspace() {
 	int cl = get_caret_line();
 
 	if (cc == 0 && cl == 0) {
-		return;
-	}
-
-	if (has_selection()) {
-		delete_selection();
 		return;
 	}
 
@@ -654,7 +656,7 @@ void CodeEdit::_backspace() {
 	// For space indentation we need to do a simple unindent if there are no chars to the left, acting in the
 	// same way as tabs.
 	if (indent_using_spaces && cc != 0) {
-		if (get_first_non_whitespace_column(cl) > cc) {
+		if (get_first_non_whitespace_column(cl) >= cc) {
 			prev_column = cc - _calculate_spaces_till_next_left_indent(cc);
 			prev_line = cl;
 		}
@@ -987,10 +989,10 @@ void CodeEdit::_new_line(bool p_split_current_line, bool p_above) {
 				/* No need to move the brace below if we are not taking the text with us. */
 				if (p_split_current_line) {
 					brace_indent = true;
-					ins += "\n" + ins.substr(1, ins.length() - 2);
+					ins += "\n" + ins.substr(indent_text.size(), ins.length() - 2);
 				} else {
 					brace_indent = false;
-					ins = "\n" + ins.substr(1, ins.length() - 2);
+					ins = "\n" + ins.substr(indent_text.size(), ins.length() - 2);
 				}
 			}
 		}
@@ -1146,16 +1148,23 @@ bool CodeEdit::is_drawing_executing_lines_gutter() const {
 }
 
 void CodeEdit::_main_gutter_draw_callback(int p_line, int p_gutter, const Rect2 &p_region) {
-	if (draw_breakpoints && is_line_breakpointed(p_line)) {
-		int padding = p_region.size.x / 6;
+	if (draw_breakpoints && breakpoint_icon.is_valid()) {
+		bool hovering = p_region.has_point(get_local_mouse_pos());
+		bool breakpointed = is_line_breakpointed(p_line);
 
-		Rect2 breakpoint_region = p_region;
-		breakpoint_region.position += Point2(padding, padding);
-		breakpoint_region.size -= Point2(padding, padding) * 2;
-		breakpoint_icon->draw_rect(get_canvas_item(), breakpoint_region, false, breakpoint_color);
+		if (breakpointed || (hovering && !is_dragging_cursor())) {
+			int padding = p_region.size.x / 6;
+			Rect2 icon_region = p_region;
+			icon_region.position += Point2(padding, padding);
+			icon_region.size -= Point2(padding, padding) * 2;
+
+			// Darken icon when hovering & not yet breakpointed.
+			Color use_color = hovering && !breakpointed ? breakpoint_color.darkened(0.4) : breakpoint_color;
+			breakpoint_icon->draw_rect(get_canvas_item(), icon_region, false, use_color);
+		}
 	}
 
-	if (draw_bookmarks && is_line_bookmarked(p_line)) {
+	if (draw_bookmarks && is_line_bookmarked(p_line) && bookmark_icon.is_valid()) {
 		int horizontal_padding = p_region.size.x / 2;
 		int vertical_padding = p_region.size.y / 4;
 
@@ -1165,7 +1174,7 @@ void CodeEdit::_main_gutter_draw_callback(int p_line, int p_gutter, const Rect2 
 		bookmark_icon->draw_rect(get_canvas_item(), bookmark_region, false, bookmark_color);
 	}
 
-	if (draw_executing_lines && is_line_executing(p_line)) {
+	if (draw_executing_lines && is_line_executing(p_line) && executing_line_icon.is_valid()) {
 		int horizontal_padding = p_region.size.x / 10;
 		int vertical_padding = p_region.size.y / 4;
 
@@ -1400,31 +1409,33 @@ void CodeEdit::fold_line(int p_line) {
 	}
 
 	/* Find the last line to be hidden. */
-	int end_line = get_line_count();
+	const int line_count = get_line_count() - 1;
+	int end_line = line_count;
 
 	int in_comment = is_in_comment(p_line);
 	int in_string = (in_comment == -1) ? is_in_string(p_line) : -1;
 	if (in_string != -1 || in_comment != -1) {
 		end_line = get_delimiter_end_position(p_line, get_line(p_line).size() - 1).y;
-		/* End line is the same therefore we have a block. */
+		/* End line is the same therefore we have a block of single line delimiters. */
 		if (end_line == p_line) {
-			for (int i = p_line + 1; i < get_line_count(); i++) {
+			for (int i = p_line + 1; i <= line_count; i++) {
 				if ((in_string != -1 && is_in_string(i) == -1) || (in_comment != -1 && is_in_comment(i) == -1)) {
-					end_line = i - 1;
 					break;
 				}
+				end_line = i;
 			}
 		}
 	} else {
 		int start_indent = get_indent_level(p_line);
-		for (int i = p_line + 1; i < get_line_count(); i++) {
-			if (get_line(p_line).strip_edges().size() == 0 || is_in_string(i) != -1 || is_in_comment(i) != -1) {
+		for (int i = p_line + 1; i <= line_count; i++) {
+			if (get_line(i).strip_edges().size() == 0) {
+				continue;
+			}
+			if (get_indent_level(i) > start_indent) {
 				end_line = i;
 				continue;
 			}
-
-			if (get_indent_level(i) <= start_indent && get_line(i).strip_edges().size() != 0) {
-				end_line = i - 1;
+			if (is_in_string(i) == -1 && is_in_comment(i) == -1) {
 				break;
 			}
 		}
@@ -1594,16 +1605,17 @@ Point2 CodeEdit::get_delimiter_start_position(int p_line, int p_column) const {
 	bool in_region = ((p_line <= 0 || delimiter_cache[p_line - 1].size() < 1) ? -1 : delimiter_cache[p_line - 1].back()->value()) != -1;
 
 	/* Check the keys for this line. */
-	for (Map<int, int>::Element *E = delimiter_cache[p_line].front(); E; E = E->next()) {
-		if (E->key() > p_column) {
+	for (const KeyValue<int, int> &E : delimiter_cache[p_line]) {
+		if (E.key > p_column) {
 			break;
 		}
-		in_region = E->value() != -1;
-		start_position.x = in_region ? E->key() : -1;
+		in_region = E.value != -1;
+		start_position.x = in_region ? E.key : -1;
 	}
 
 	/* Region was found on this line and is not a multiline continuation. */
-	if (start_position.x != -1 && start_position.x != get_line(p_line).length() + 1) {
+	int line_length = get_line(p_line).length();
+	if (start_position.x != -1 && line_length > 0 && start_position.x != line_length + 1) {
 		start_position.y = p_line;
 		return start_position;
 	}
@@ -1622,7 +1634,8 @@ Point2 CodeEdit::get_delimiter_start_position(int p_line, int p_column) const {
 		start_position.x = delimiter_cache[i].back()->key();
 
 		/* Make sure it's not a multiline continuation. */
-		if (start_position.x != get_line(i).length() + 1) {
+		line_length = get_line(i).length();
+		if (line_length > 0 && start_position.x != line_length + 1) {
 			break;
 		}
 	}
@@ -1643,12 +1656,12 @@ Point2 CodeEdit::get_delimiter_end_position(int p_line, int p_column) const {
 	int region = (p_line <= 0 || delimiter_cache[p_line - 1].size() < 1) ? -1 : delimiter_cache[p_line - 1].back()->value();
 
 	/* Check the keys for this line. */
-	for (Map<int, int>::Element *E = delimiter_cache[p_line].front(); E; E = E->next()) {
-		end_position.x = (E->value() == -1) ? E->key() : -1;
-		if (E->key() > p_column) {
+	for (const KeyValue<int, int> &E : delimiter_cache[p_line]) {
+		end_position.x = (E.value == -1) ? E.key : -1;
+		if (E.key > p_column) {
 			break;
 		}
-		region = E->value();
+		region = E.value;
 	}
 
 	/* Region was found on this line and is not a multiline continuation. */
@@ -1704,14 +1717,17 @@ bool CodeEdit::is_code_completion_enabled() const {
 void CodeEdit::set_code_completion_prefixes(const TypedArray<String> &p_prefixes) {
 	code_completion_prefixes.clear();
 	for (int i = 0; i < p_prefixes.size(); i++) {
-		code_completion_prefixes.insert(p_prefixes[i]);
+		const String prefix = p_prefixes[i];
+
+		ERR_CONTINUE_MSG(prefix.is_empty(), "Code completion prefix cannot be empty.");
+		code_completion_prefixes.insert(prefix[0]);
 	}
 }
 
 TypedArray<String> CodeEdit::get_code_completion_prefixes() const {
 	TypedArray<String> prefixes;
-	for (Set<String>::Element *E = code_completion_prefixes.front(); E; E = E->next()) {
-		prefixes.push_back(E->get());
+	for (const Set<char32_t>::Element *E = code_completion_prefixes.front(); E; E = E->next()) {
+		prefixes.push_back(String::chr(E->get()));
 	}
 	return prefixes;
 }
@@ -1739,9 +1755,7 @@ String CodeEdit::get_text_for_code_completion() const {
 }
 
 void CodeEdit::request_code_completion(bool p_force) {
-	ScriptInstance *si = get_script_instance();
-	if (si && si->has_method("_request_code_completion")) {
-		si->call("_request_code_completion", p_force);
+	if (GDVIRTUAL_CALL(_request_code_completion, p_force)) {
 		return;
 	}
 
@@ -1776,9 +1790,9 @@ void CodeEdit::request_code_completion(bool p_force) {
 	String line = get_line(get_caret_line());
 	int ofs = CLAMP(get_caret_column(), 0, line.length());
 
-	if (ofs > 0 && (is_in_string(get_caret_line(), ofs) != -1 || _is_char(line[ofs - 1]) || code_completion_prefixes.has(String::chr(line[ofs - 1])))) {
+	if (ofs > 0 && (is_in_string(get_caret_line(), ofs) != -1 || _is_char(line[ofs - 1]) || code_completion_prefixes.has(line[ofs - 1]))) {
 		emit_signal(SNAME("request_code_completion"));
-	} else if (ofs > 1 && line[ofs - 1] == ' ' && code_completion_prefixes.has(String::chr(line[ofs - 2]))) {
+	} else if (ofs > 1 && line[ofs - 1] == ' ' && code_completion_prefixes.has(line[ofs - 2])) {
 		emit_signal(SNAME("request_code_completion"));
 	}
 }
@@ -1798,7 +1812,7 @@ void CodeEdit::update_code_completion_options(bool p_forced) {
 	code_completion_forced = p_forced;
 	code_completion_option_sources = code_completion_option_submitted;
 	code_completion_option_submitted.clear();
-	_filter_code_completion_candidates();
+	_filter_code_completion_candidates_impl();
 }
 
 TypedArray<Dictionary> CodeEdit::get_code_completion_options() const {
@@ -1855,11 +1869,10 @@ void CodeEdit::confirm_code_completion(bool p_replace) {
 		return;
 	}
 
-	ScriptInstance *si = get_script_instance();
-	if (si && si->has_method("_confirm_code_completion")) {
-		si->call("_confirm_code_completion", p_replace);
+	if (GDVIRTUAL_CALL(_confirm_code_completion, p_replace)) {
 		return;
 	}
+
 	begin_complex_operation();
 
 	int caret_line = get_caret_line();
@@ -1940,7 +1953,7 @@ void CodeEdit::confirm_code_completion(bool p_replace) {
 
 	if (pre_brace_pair == -1 && post_brace_pair == -1 && get_caret_column() > 0 && get_caret_column() < get_line(caret_line).length()) {
 		pre_brace_pair = _get_auto_brace_pair_open_at_pos(caret_line, get_caret_column() + 1);
-		if (pre_brace_pair == _get_auto_brace_pair_close_at_pos(caret_line, get_caret_column() - 1)) {
+		if (pre_brace_pair != -1 && pre_brace_pair == _get_auto_brace_pair_close_at_pos(caret_line, get_caret_column() - 1)) {
 			remove_text(caret_line, get_caret_column() - 2, caret_line, get_caret_column());
 			if (_get_auto_brace_pair_close_at_pos(caret_line, get_caret_column() - 1) != pre_brace_pair) {
 				set_caret_column(get_caret_column() - 1);
@@ -1951,7 +1964,7 @@ void CodeEdit::confirm_code_completion(bool p_replace) {
 	end_complex_operation();
 
 	cancel_code_completion();
-	if (code_completion_prefixes.has(String::chr(last_completion_char))) {
+	if (code_completion_prefixes.has(last_completion_char)) {
 		request_code_completion();
 	}
 }
@@ -1988,9 +2001,13 @@ bool CodeEdit::is_symbol_lookup_on_click_enabled() const {
 String CodeEdit::get_text_for_symbol_lookup() {
 	Point2i mp = get_local_mouse_pos();
 
-	Point2i pos = get_line_column_at_pos(mp);
+	Point2i pos = get_line_column_at_pos(mp, false);
 	int line = pos.y;
 	int col = pos.x;
+
+	if (line == -1) {
+		return String();
+	}
 
 	StringBuilder lookup_text;
 	const int text_size = get_line_count();
@@ -2016,7 +2033,9 @@ String CodeEdit::get_text_for_symbol_lookup() {
 void CodeEdit::set_symbol_lookup_word_as_valid(bool p_valid) {
 	symbol_lookup_word = p_valid ? symbol_lookup_new_word : "";
 	symbol_lookup_new_word = "";
-	_set_symbol_lookup_word(symbol_lookup_word);
+	if (lookup_symbol_word != symbol_lookup_word) {
+		_set_symbol_lookup_word(symbol_lookup_word);
+	}
 }
 
 void CodeEdit::_bind_methods() {
@@ -2179,9 +2198,10 @@ void CodeEdit::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_code_comletion_prefixes"), &CodeEdit::get_code_completion_prefixes);
 
 	// Overridable
-	BIND_VMETHOD(MethodInfo("_confirm_code_completion", PropertyInfo(Variant::BOOL, "replace")));
-	BIND_VMETHOD(MethodInfo("_request_code_completion", PropertyInfo(Variant::BOOL, "force")));
-	BIND_VMETHOD(MethodInfo(Variant::ARRAY, "_filter_code_completion_candidates", PropertyInfo(Variant::ARRAY, "candidates")));
+
+	GDVIRTUAL_BIND(_confirm_code_completion, "replace")
+	GDVIRTUAL_BIND(_request_code_completion, "force")
+	GDVIRTUAL_BIND(_filter_code_completion_candidates, "candidates")
 
 	/* Line length guidelines */
 	ClassDB::bind_method(D_METHOD("set_line_length_guidelines", "guideline_columns"), &CodeEdit::set_line_length_guidelines);
@@ -2358,7 +2378,7 @@ void CodeEdit::_update_delimiter_cache(int p_from_line, int p_to_line) {
 	if (start_line != end_line) {
 		if (p_to_line < p_from_line) {
 			for (int i = end_line; i > start_line; i--) {
-				delimiter_cache.remove(i);
+				delimiter_cache.remove_at(i);
 			}
 		} else {
 			for (int i = start_line; i < end_line; i++) {
@@ -2550,7 +2570,10 @@ int CodeEdit::_is_in_delimiter(int p_line, int p_column, DelimiterType p_type) c
 }
 
 void CodeEdit::_add_delimiter(const String &p_start_key, const String &p_end_key, bool p_line_only, DelimiterType p_type) {
-	if (p_start_key.length() > 0) {
+	// If we are the editor allow "null" as a valid start key, otherwise users cannot add delimiters via the inspector.
+	if (!(Engine::get_singleton()->is_editor_hint() && p_start_key == "null")) {
+		ERR_FAIL_COND_MSG(p_start_key.is_empty(), "delimiter start key cannot be empty");
+
 		for (int i = 0; i < p_start_key.length(); i++) {
 			ERR_FAIL_COND_MSG(!is_symbol(p_start_key[i]), "delimiter must start with a symbol");
 		}
@@ -2574,7 +2597,7 @@ void CodeEdit::_add_delimiter(const String &p_start_key, const String &p_end_key
 	delimiter.type = p_type;
 	delimiter.start_key = p_start_key;
 	delimiter.end_key = p_end_key;
-	delimiter.line_only = p_line_only || p_end_key == "";
+	delimiter.line_only = p_line_only || p_end_key.is_empty();
 	delimiters.insert(at, delimiter);
 	if (!setting_delimiters) {
 		delimiter_cache.clear();
@@ -2592,7 +2615,7 @@ void CodeEdit::_remove_delimiter(const String &p_start_key, DelimiterType p_type
 			break;
 		}
 
-		delimiters.remove(i);
+		delimiters.remove_at(i);
 		if (!setting_delimiters) {
 			delimiter_cache.clear();
 			_update_delimiter_cache();
@@ -2615,12 +2638,16 @@ void CodeEdit::_set_delimiters(const TypedArray<String> &p_delimiters, Delimiter
 	_clear_delimiters(p_type);
 
 	for (int i = 0; i < p_delimiters.size(); i++) {
-		String key = p_delimiters[i].is_null() ? "" : p_delimiters[i];
+		String key = p_delimiters[i];
+
+		if (key.is_empty()) {
+			continue;
+		}
 
 		const String start_key = key.get_slice(" ", 0);
 		const String end_key = key.get_slice_count(" ") > 1 ? key.get_slice(" ", 1) : String();
 
-		_add_delimiter(start_key, end_key, end_key == "", p_type);
+		_add_delimiter(start_key, end_key, end_key.is_empty(), p_type);
 	}
 	setting_delimiters = false;
 	_update_delimiter_cache();
@@ -2629,7 +2656,7 @@ void CodeEdit::_set_delimiters(const TypedArray<String> &p_delimiters, Delimiter
 void CodeEdit::_clear_delimiters(DelimiterType p_type) {
 	for (int i = delimiters.size() - 1; i >= 0; i--) {
 		if (delimiters[i].type == p_type) {
-			delimiters.remove(i);
+			delimiters.remove_at(i);
 		}
 	}
 	delimiter_cache.clear();
@@ -2650,11 +2677,10 @@ TypedArray<String> CodeEdit::_get_delimiters(DelimiterType p_type) const {
 }
 
 /* Code Completion */
-void CodeEdit::_filter_code_completion_candidates() {
-	ScriptInstance *si = get_script_instance();
+void CodeEdit::_filter_code_completion_candidates_impl() {
 	int line_height = get_line_height();
 
-	if (si && si->has_method("_filter_code_completion_candidates")) {
+	if (GDVIRTUAL_IS_OVERRIDDEN(_filter_code_completion_candidates)) {
 		code_completion_options.clear();
 		code_completion_base = "";
 
@@ -2674,7 +2700,9 @@ void CodeEdit::_filter_code_completion_candidates() {
 			i++;
 		}
 
-		TypedArray<Dictionary> completion_options = si->call("_filter_code_completion_candidates", completion_options_sources);
+		Array completion_options;
+
+		GDVIRTUAL_CALL(_filter_code_completion_candidates, completion_options_sources, completion_options);
 
 		/* No options to complete, cancel. */
 		if (completion_options.size() == 0) {
@@ -2735,7 +2763,7 @@ void CodeEdit::_filter_code_completion_candidates() {
 	bool prev_is_word = false;
 
 	/* Cancel if we are at the close of a string. */
-	if (in_string == -1 && first_quote_col == cofs - 1) {
+	if (caret_column > 0 && in_string == -1 && first_quote_col == cofs - 1) {
 		cancel_code_completion();
 		return;
 		/* In a string, therefore we are trying to complete the string text. */
@@ -2745,7 +2773,7 @@ void CodeEdit::_filter_code_completion_candidates() {
 		/* If we have a space, previous word might be a keyword. eg "func |". */
 	} else if (cofs > 0 && line[cofs - 1] == ' ') {
 		int ofs = cofs - 1;
-		while (ofs >= 0 && line[ofs] == ' ') {
+		while (ofs > 0 && line[ofs] == ' ') {
 			ofs--;
 		}
 		prev_is_word = _is_char(line[ofs]);
@@ -2761,9 +2789,9 @@ void CodeEdit::_filter_code_completion_candidates() {
 	/* If all else fails, check for a prefix.         */
 	/* Single space between caret and prefix is okay. */
 	bool prev_is_prefix = false;
-	if (cofs > 0 && code_completion_prefixes.has(String::chr(line[cofs - 1]))) {
+	if (cofs > 0 && code_completion_prefixes.has(line[cofs - 1])) {
 		prev_is_prefix = true;
-	} else if (cofs > 1 && line[cofs - 1] == ' ' && code_completion_prefixes.has(String::chr(line[cofs - 2]))) {
+	} else if (cofs > 1 && line[cofs - 1] == ' ' && code_completion_prefixes.has(line[cofs - 2])) {
 		prev_is_prefix = true;
 	}
 
@@ -2898,6 +2926,7 @@ void CodeEdit::_lines_edited_from(int p_from_line, int p_to_line) {
 		return;
 	}
 
+	lines_edited_changed += p_to_line - p_from_line;
 	lines_edited_from = (lines_edited_from == -1) ? MIN(p_from_line, p_to_line) : MIN(lines_edited_from, MIN(p_from_line, p_to_line));
 	lines_edited_to = (lines_edited_to == -1) ? MAX(p_from_line, p_to_line) : MAX(lines_edited_from, MAX(p_from_line, p_to_line));
 }
@@ -2924,7 +2953,6 @@ void CodeEdit::_text_changed() {
 	}
 
 	lc = get_line_count();
-	int line_change_size = (lines_edited_to - lines_edited_from);
 	List<int> breakpoints;
 	breakpointed_lines.get_key_list(&breakpoints);
 	for (const int &line : breakpoints) {
@@ -2935,8 +2963,8 @@ void CodeEdit::_text_changed() {
 		breakpointed_lines.erase(line);
 		emit_signal(SNAME("breakpoint_toggled"), line);
 
-		int next_line = line + line_change_size;
-		if (next_line < lc && is_line_breakpointed(next_line)) {
+		int next_line = line + lines_edited_changed;
+		if (next_line > -1 && next_line < lc && is_line_breakpointed(next_line)) {
 			emit_signal(SNAME("breakpoint_toggled"), next_line);
 			breakpointed_lines[next_line] = true;
 			continue;
@@ -2945,6 +2973,7 @@ void CodeEdit::_text_changed() {
 
 	lines_edited_from = -1;
 	lines_edited_to = -1;
+	lines_edited_changed = 0;
 }
 
 CodeEdit::CodeEdit() {

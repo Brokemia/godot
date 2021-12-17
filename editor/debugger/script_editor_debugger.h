@@ -94,7 +94,9 @@ private:
 
 	VBoxContainer *errors_tab;
 	Tree *error_tree;
-	Button *clearbutton;
+	Button *expand_all_button;
+	Button *collapse_all_button;
+	Button *clear_button;
 	PopupMenu *item_menu;
 
 	EditorFileDialog *file_dialog;
@@ -204,6 +206,9 @@ private:
 
 	void _clear_execution();
 	void _stop_and_notify();
+
+	void _set_breakpoint(const String &p_path, const int &p_line, const bool &p_enabled);
+	void _clear_breakpoints();
 
 protected:
 	void _notification(int p_what);

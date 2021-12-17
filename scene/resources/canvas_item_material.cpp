@@ -30,6 +30,8 @@
 
 #include "canvas_item_material.h"
 
+#include "core/version.h"
+
 Mutex CanvasItemMaterial::material_mutex;
 SelfList<CanvasItemMaterial>::List *CanvasItemMaterial::dirty_materials = nullptr;
 Map<CanvasItemMaterial::MaterialKey, CanvasItemMaterial::ShaderData> CanvasItemMaterial::shader_map;
@@ -78,7 +80,10 @@ void CanvasItemMaterial::_update_shader() {
 
 	//must create a shader!
 
-	String code = "shader_type canvas_item;\nrender_mode ";
+	// Add a comment to describe the shader origin (useful when converting to ShaderMaterial).
+	String code = "// NOTE: Shader automatically converted from " VERSION_NAME " " VERSION_FULL_CONFIG "'s CanvasItemMaterial.\n\n";
+
+	code += "shader_type canvas_item;\nrender_mode ";
 	switch (blend_mode) {
 		case BLEND_MODE_MIX:
 			code += "blend_mix";
@@ -130,7 +135,7 @@ void CanvasItemMaterial::_update_shader() {
 		code += "		particle_frame = mod(particle_frame, particle_total_frames);\n";
 		code += "	}";
 		code += "	UV /= vec2(h_frames, v_frames);\n";
-		code += "	UV += vec2(mod(particle_frame, h_frames) / h_frames, floor(particle_frame / h_frames) / v_frames);\n";
+		code += "	UV += vec2(mod(particle_frame, h_frames) / h_frames, floor((particle_frame + 0.5) / h_frames) / v_frames);\n";
 		code += "}\n";
 	}
 
@@ -156,7 +161,7 @@ void CanvasItemMaterial::flush_changes() {
 void CanvasItemMaterial::_queue_shader_change() {
 	MutexLock lock(material_mutex);
 
-	if (!element.in_list()) {
+	if (is_initialized && !element.in_list()) {
 		dirty_materials->add(&element);
 	}
 }
@@ -282,6 +287,7 @@ CanvasItemMaterial::CanvasItemMaterial() :
 	set_particles_anim_loop(false);
 
 	current_key.invalid_key = 1;
+	is_initialized = true;
 	_queue_shader_change();
 }
 

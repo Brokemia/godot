@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 EnsureSConsVersion(3, 0, 0)
-EnsurePythonVersion(3, 5)
+EnsurePythonVersion(3, 6)
 
 # System
 import atexit
@@ -15,6 +15,7 @@ from collections import OrderedDict
 # Local
 import methods
 import glsl_builders
+import gles3_builders
 
 # Scan possible build platforms
 
@@ -91,6 +92,7 @@ env_base.__class__.add_program = methods.add_program
 env_base.__class__.CommandNoCache = methods.CommandNoCache
 env_base.__class__.Run = methods.Run
 env_base.__class__.disable_warnings = methods.disable_warnings
+env_base.__class__.force_optimization_on_debug = methods.force_optimization_on_debug
 env_base.__class__.module_check_dependencies = methods.module_check_dependencies
 
 env_base["x86_libtheora_opt_gcc"] = False
@@ -125,10 +127,11 @@ opts.Add(BoolVariable("production", "Set defaults to build Godot for use in prod
 opts.Add(BoolVariable("use_lto", "Use link-time optimization", False))
 
 # Components
-opts.Add(BoolVariable("deprecated", "Enable deprecated features", True))
+opts.Add(BoolVariable("deprecated", "Enable compatibility code for deprecated and removed features", True))
 opts.Add(BoolVariable("minizip", "Enable ZIP archive support using minizip", True))
 opts.Add(BoolVariable("xaudio2", "Enable the XAudio2 audio driver", False))
 opts.Add(BoolVariable("vulkan", "Enable the vulkan video driver", True))
+opts.Add(BoolVariable("opengl3", "Enable the OpenGL/GLES3 video driver", True))
 opts.Add("custom_modules", "A list of comma-separated directory paths containing custom modules to build.", "")
 opts.Add(BoolVariable("custom_modules_recursive", "Detect custom modules recursively for each specified path.", True))
 opts.Add(BoolVariable("use_volk", "Use the volk library to load the Vulkan loader dynamically", True))
@@ -146,7 +149,7 @@ opts.Add(BoolVariable("disable_3d", "Disable 3D nodes for a smaller executable",
 opts.Add(BoolVariable("disable_advanced_gui", "Disable advanced GUI nodes and behaviors", False))
 opts.Add("disable_classes", "Disable given classes (comma separated)", "")
 opts.Add(BoolVariable("modules_enabled_by_default", "If no, disable all modules except ones explicitly enabled", True))
-opts.Add(BoolVariable("no_editor_splash", "Don't use the custom splash screen for the editor", False))
+opts.Add(BoolVariable("no_editor_splash", "Don't use the custom splash screen for the editor", True))
 opts.Add("system_certs_path", "Use this path as SSL certificates default for editor (for package maintainers)", "")
 opts.Add(BoolVariable("use_precise_math_checks", "Math checks use very precise epsilon (debug option)", False))
 
@@ -156,6 +159,7 @@ opts.Add(BoolVariable("builtin_certs", "Use the built-in SSL certificates bundle
 opts.Add(BoolVariable("builtin_embree", "Use the built-in Embree library", True))
 opts.Add(BoolVariable("builtin_enet", "Use the built-in ENet library", True))
 opts.Add(BoolVariable("builtin_freetype", "Use the built-in FreeType library", True))
+opts.Add(BoolVariable("builtin_msdfgen", "Use the built-in MSDFgen library", True))
 opts.Add(BoolVariable("builtin_glslang", "Use the built-in glslang library", True))
 opts.Add(BoolVariable("builtin_graphite", "Use the built-in Graphite library", True))
 opts.Add(BoolVariable("builtin_harfbuzz", "Use the built-in HarfBuzz library", True))
@@ -164,12 +168,10 @@ opts.Add(BoolVariable("builtin_libogg", "Use the built-in libogg library", True)
 opts.Add(BoolVariable("builtin_libpng", "Use the built-in libpng library", True))
 opts.Add(BoolVariable("builtin_libtheora", "Use the built-in libtheora library", True))
 opts.Add(BoolVariable("builtin_libvorbis", "Use the built-in libvorbis library", True))
-opts.Add(BoolVariable("builtin_libvpx", "Use the built-in libvpx library", True))
 opts.Add(BoolVariable("builtin_libwebp", "Use the built-in libwebp library", True))
 opts.Add(BoolVariable("builtin_wslay", "Use the built-in wslay library", True))
 opts.Add(BoolVariable("builtin_mbedtls", "Use the built-in mbedTLS library", True))
 opts.Add(BoolVariable("builtin_miniupnpc", "Use the built-in miniupnpc library", True))
-opts.Add(BoolVariable("builtin_opus", "Use the built-in Opus library", True))
 opts.Add(BoolVariable("builtin_pcre2", "Use the built-in PCRE2 library", True))
 opts.Add(BoolVariable("builtin_pcre2_with_jit", "Use JIT compiler for the built-in PCRE2 library", True))
 opts.Add(BoolVariable("builtin_recast", "Use the built-in Recast library", True))
@@ -298,6 +300,13 @@ opts.Update(env_base)
 env_base["platform"] = selected_platform  # Must always be re-set after calling opts.Update().
 Help(opts.GenerateHelpText(env_base))
 
+# Detect and print a warning listing unknown SCons variables to ease troubleshooting.
+unknown = opts.UnknownVariables()
+if unknown:
+    print("WARNING: Unknown SCons variables were passed and will be ignored:")
+    for item in unknown.items():
+        print("    " + item[0] + "=" + item[1])
+
 # add default include paths
 
 env_base.Prepend(CPPPATH=["#"])
@@ -306,22 +315,23 @@ env_base.Prepend(CPPPATH=["#"])
 env_base.platform_exporters = platform_exporters
 env_base.platform_apis = platform_apis
 
+# Build type defines - more platform-specific ones can be in detect.py.
+if env_base["target"] == "release_debug" or env_base["target"] == "debug":
+    # DEBUG_ENABLED enables debugging *features* and debug-only code, which is intended
+    # to give *users* extra debugging information for their game development.
+    env_base.Append(CPPDEFINES=["DEBUG_ENABLED"])
+
+if env_base["target"] == "debug":
+    # DEV_ENABLED enables *engine developer* code which should only be compiled for those
+    # working on the engine itself.
+    env_base.Append(CPPDEFINES=["DEV_ENABLED"])
+
 if env_base["use_precise_math_checks"]:
     env_base.Append(CPPDEFINES=["PRECISE_MATH_CHECKS"])
 
-if env_base["target"] == "debug":
-    env_base.Append(CPPDEFINES=["DEBUG_MEMORY_ALLOC", "DISABLE_FORCED_INLINE"])
-
-    # The two options below speed up incremental builds, but reduce the certainty that all files
-    # will properly be rebuilt. As such, we only enable them for debug (dev) builds, not release.
-
-    # To decide whether to rebuild a file, use the MD5 sum only if the timestamp has changed.
-    # http://scons.org/doc/production/HTML/scons-user/ch06.html#idm139837621851792
-    env_base.Decider("MD5-timestamp")
-    # Use cached implicit dependencies by default. Can be overridden by specifying `--implicit-deps-changed` in the command line.
-    # http://scons.org/doc/production/HTML/scons-user/ch06s04.html
-    env_base.SetOption("implicit_cache", 1)
-
+if not env_base.File("#main/splash_editor.png").exists():
+    # Force disabling editor splash if missing.
+    env_base["no_editor_splash"] = True
 if env_base["no_editor_splash"]:
     env_base.Append(CPPDEFINES=["NO_EDITOR_SPLASH"])
 
@@ -682,7 +692,7 @@ if selected_platform in platform_list:
     if env["minizip"]:
         env.Append(CPPDEFINES=["MINIZIP_ENABLED"])
 
-    editor_module_list = ["freetype", "regex"]
+    editor_module_list = ["freetype"]
     if env["tools"] and not env.module_check_dependencies("tools", editor_module_list):
         print(
             "Build option 'module_"
@@ -702,6 +712,11 @@ if selected_platform in platform_list:
         ),
         "GLSL_HEADER": env.Builder(
             action=env.Run(glsl_builders.build_raw_headers, 'Building GLSL header: "$TARGET"'),
+            suffix="glsl.gen.h",
+            src_suffix=".glsl",
+        ),
+        "GLES3_GLSL": env.Builder(
+            action=env.Run(gles3_builders.build_gles3_headers, 'Building GLES3 GLSL header: "$TARGET"'),
             suffix="glsl.gen.h",
             src_suffix=".glsl",
         ),

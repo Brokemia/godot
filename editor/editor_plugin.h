@@ -39,9 +39,9 @@
 #include "editor/import/editor_import_plugin.h"
 #include "editor/import/resource_importer_scene.h"
 #include "editor/script_create_dialog.h"
+#include "scene/3d/camera_3d.h"
 #include "scene/main/node.h"
 #include "scene/resources/texture.h"
-
 class EditorNode;
 class Node3D;
 class Camera3D;
@@ -74,6 +74,7 @@ public:
 	Control *get_editor_main_control();
 	void edit_resource(const Ref<Resource> &p_resource);
 	void edit_node(Node *p_node);
+	void edit_script(const Ref<Script> &p_script, int p_line = -1, int p_col = 0, bool p_grab_focus = true);
 	void open_scene_from_path(const String &scene_path);
 	void reload_scene_from_path(const String &scene_path);
 
@@ -148,6 +149,30 @@ protected:
 	void add_custom_type(const String &p_type, const String &p_base, const Ref<Script> &p_script, const Ref<Texture2D> &p_icon);
 	void remove_custom_type(const String &p_type);
 
+	GDVIRTUAL1R(bool, _forward_canvas_gui_input, Ref<InputEvent>)
+	GDVIRTUAL1(_forward_canvas_draw_over_viewport, Control *)
+	GDVIRTUAL1(_forward_canvas_force_draw_over_viewport, Control *)
+	GDVIRTUAL2R(int, _forward_3d_gui_input, Camera3D *, Ref<InputEvent>)
+	GDVIRTUAL1(_forward_3d_draw_over_viewport, Control *)
+	GDVIRTUAL1(_forward_3d_force_draw_over_viewport, Control *)
+	GDVIRTUAL0RC(String, _get_plugin_name)
+	GDVIRTUAL0RC(Ref<Texture2D>, _get_plugin_icon)
+	GDVIRTUAL0RC(bool, _has_main_screen)
+	GDVIRTUAL1(_make_visible, bool)
+	GDVIRTUAL1(_edit, Variant)
+	GDVIRTUAL1RC(bool, _handles, Variant)
+	GDVIRTUAL0RC(Dictionary, _get_state)
+	GDVIRTUAL1(_set_state, Dictionary)
+	GDVIRTUAL0(_clear)
+	GDVIRTUAL0(_save_external_data)
+	GDVIRTUAL0(_apply_changes)
+	GDVIRTUAL0RC(Vector<String>, _get_breakpoints)
+	GDVIRTUAL1(_set_window_layout, Ref<ConfigFile>)
+	GDVIRTUAL1(_get_window_layout, Ref<ConfigFile>)
+	GDVIRTUAL0R(bool, _build)
+	GDVIRTUAL0(_enable_plugin)
+	GDVIRTUAL0(_disable_plugin)
+
 public:
 	enum CustomControlContainer {
 		CONTAINER_TOOLBAR,
@@ -174,6 +199,12 @@ public:
 		DOCK_SLOT_RIGHT_UR,
 		DOCK_SLOT_RIGHT_BR,
 		DOCK_SLOT_MAX
+	};
+
+	enum AfterGUIInput {
+		AFTER_GUI_INPUT_PASS,
+		AFTER_GUI_INPUT_STOP,
+		AFTER_GUI_INPUT_DESELECT
 	};
 
 	//TODO: send a resource for editing to the editor node?
@@ -204,7 +235,7 @@ public:
 	virtual void forward_canvas_draw_over_viewport(Control *p_overlay);
 	virtual void forward_canvas_force_draw_over_viewport(Control *p_overlay);
 
-	virtual bool forward_spatial_gui_input(Camera3D *p_camera, const Ref<InputEvent> &p_event);
+	virtual EditorPlugin::AfterGUIInput forward_spatial_gui_input(Camera3D *p_camera, const Ref<InputEvent> &p_event);
 	virtual void forward_spatial_draw_over_viewport(Control *p_overlay);
 	virtual void forward_spatial_force_draw_over_viewport(Control *p_overlay);
 
@@ -258,8 +289,11 @@ public:
 	void add_inspector_plugin(const Ref<EditorInspectorPlugin> &p_plugin);
 	void remove_inspector_plugin(const Ref<EditorInspectorPlugin> &p_plugin);
 
-	void add_scene_import_plugin(const Ref<EditorSceneImporter> &p_importer);
-	void remove_scene_import_plugin(const Ref<EditorSceneImporter> &p_importer);
+	void add_scene_format_importer_plugin(const Ref<EditorSceneFormatImporter> &p_importer);
+	void remove_scene_format_importer_plugin(const Ref<EditorSceneFormatImporter> &p_importer);
+
+	void add_scene_post_import_plugin(const Ref<EditorScenePostImportPlugin> &p_importer);
+	void remove_scene_post_import_plugin(const Ref<EditorScenePostImportPlugin> &p_importer);
 
 	void add_autoload_singleton(const String &p_name, const String &p_path);
 	void remove_autoload_singleton(const String &p_name);

@@ -50,7 +50,9 @@ void CollisionObject2D::_notification(int p_what) {
 			}
 
 			if (!disabled || (disable_mode != DISABLE_MODE_REMOVE)) {
-				RID space = get_world_2d()->get_space();
+				Ref<World2D> world_ref = get_world_2d();
+				ERR_FAIL_COND(!world_ref.is_valid());
+				RID space = world_ref->get_space();
 				if (area) {
 					PhysicsServer2D::get_singleton()->area_set_space(rid, space);
 				} else {
@@ -342,15 +344,15 @@ real_t CollisionObject2D::get_shape_owner_one_way_collision_margin(uint32_t p_ow
 }
 
 void CollisionObject2D::get_shape_owners(List<uint32_t> *r_owners) {
-	for (Map<uint32_t, ShapeData>::Element *E = shapes.front(); E; E = E->next()) {
-		r_owners->push_back(E->key());
+	for (const KeyValue<uint32_t, ShapeData> &E : shapes) {
+		r_owners->push_back(E.key);
 	}
 }
 
 Array CollisionObject2D::_get_shape_owners() {
 	Array ret;
-	for (Map<uint32_t, ShapeData>::Element *E = shapes.front(); E; E = E->next()) {
-		ret.push_back(E->key());
+	for (const KeyValue<uint32_t, ShapeData> &E : shapes) {
+		ret.push_back(E.key);
 	}
 
 	return ret;
@@ -432,12 +434,12 @@ void CollisionObject2D::shape_owner_remove_shape(uint32_t p_owner, int p_shape) 
 		PhysicsServer2D::get_singleton()->body_remove_shape(rid, index_to_remove);
 	}
 
-	shapes[p_owner].shapes.remove(p_shape);
+	shapes[p_owner].shapes.remove_at(p_shape);
 
-	for (Map<uint32_t, ShapeData>::Element *E = shapes.front(); E; E = E->next()) {
-		for (int i = 0; i < E->get().shapes.size(); i++) {
-			if (E->get().shapes[i].index > index_to_remove) {
-				E->get().shapes.write[i].index -= 1;
+	for (KeyValue<uint32_t, ShapeData> &E : shapes) {
+		for (int i = 0; i < E.value.shapes.size(); i++) {
+			if (E.value.shapes[i].index > index_to_remove) {
+				E.value.shapes.write[i].index -= 1;
 			}
 		}
 	}
@@ -454,18 +456,18 @@ void CollisionObject2D::shape_owner_clear_shapes(uint32_t p_owner) {
 }
 
 uint32_t CollisionObject2D::shape_find_owner(int p_shape_index) const {
-	ERR_FAIL_INDEX_V(p_shape_index, total_subshapes, 0);
+	ERR_FAIL_INDEX_V(p_shape_index, total_subshapes, UINT32_MAX);
 
-	for (const Map<uint32_t, ShapeData>::Element *E = shapes.front(); E; E = E->next()) {
-		for (int i = 0; i < E->get().shapes.size(); i++) {
-			if (E->get().shapes[i].index == p_shape_index) {
-				return E->key();
+	for (const KeyValue<uint32_t, ShapeData> &E : shapes) {
+		for (int i = 0; i < E.value.shapes.size(); i++) {
+			if (E.value.shapes[i].index == p_shape_index) {
+				return E.key;
 			}
 		}
 	}
 
 	//in theory it should be unreachable
-	return 0;
+	ERR_FAIL_V_MSG(UINT32_MAX, "Can't find owner for shape index " + itos(p_shape_index) + ".");
 }
 
 void CollisionObject2D::set_pickable(bool p_enabled) {
@@ -481,10 +483,8 @@ bool CollisionObject2D::is_pickable() const {
 	return pickable;
 }
 
-void CollisionObject2D::_input_event(Node *p_viewport, const Ref<InputEvent> &p_input_event, int p_shape) {
-	if (get_script_instance()) {
-		get_script_instance()->call(SceneStringNames::get_singleton()->_input_event, p_viewport, p_input_event, p_shape);
-	}
+void CollisionObject2D::_input_event_call(Viewport *p_viewport, const Ref<InputEvent> &p_input_event, int p_shape) {
+	GDVIRTUAL_CALL(_input_event, p_viewport, p_input_event, p_shape);
 	emit_signal(SceneStringNames::get_singleton()->input_event, p_viewport, p_input_event, p_shape);
 }
 
@@ -597,7 +597,7 @@ void CollisionObject2D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("shape_owner_clear_shapes", "owner_id"), &CollisionObject2D::shape_owner_clear_shapes);
 	ClassDB::bind_method(D_METHOD("shape_find_owner", "shape_index"), &CollisionObject2D::shape_find_owner);
 
-	BIND_VMETHOD(MethodInfo("_input_event", PropertyInfo(Variant::OBJECT, "viewport"), PropertyInfo(Variant::OBJECT, "event", PROPERTY_HINT_RESOURCE_TYPE, "InputEvent"), PropertyInfo(Variant::INT, "shape_idx")));
+	GDVIRTUAL_BIND(_input_event, "viewport", "event", "shape_idx");
 
 	ADD_SIGNAL(MethodInfo("input_event", PropertyInfo(Variant::OBJECT, "viewport", PROPERTY_HINT_RESOURCE_TYPE, "Node"), PropertyInfo(Variant::OBJECT, "event", PROPERTY_HINT_RESOURCE_TYPE, "InputEvent"), PropertyInfo(Variant::INT, "shape_idx")));
 	ADD_SIGNAL(MethodInfo("mouse_entered"));

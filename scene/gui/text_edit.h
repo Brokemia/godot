@@ -139,11 +139,13 @@ private:
 			Vector<Gutter> gutters;
 
 			String data;
-			Vector<Vector2i> bidi_override;
+			Array bidi_override;
 			Ref<TextParagraph> data_buf;
 
 			Color background_color = Color(0, 0, 0, 0);
 			bool hidden = false;
+			int height = 0;
+			int width = 0;
 
 			Line() {
 				data_buf.instantiate();
@@ -152,20 +154,27 @@ private:
 
 	private:
 		bool is_dirty = false;
+		bool tab_size_dirty = false;
 
 		mutable Vector<Line> text;
 		Ref<Font> font;
 		int font_size = -1;
+		int font_height = 0;
 
 		Dictionary opentype_features;
 		String language;
 		TextServer::Direction direction = TextServer::DIRECTION_AUTO;
 		bool draw_control_chars = false;
 
+		int line_height = -1;
+		int max_width = -1;
 		int width = -1;
 
 		int tab_size = 4;
 		int gutter_count = 0;
+
+		void _calculate_line_height();
+		void _calculate_max_line_width();
 
 	public:
 		void set_tab_size(int p_tab_size);
@@ -174,11 +183,11 @@ private:
 		void set_font_size(int p_font_size);
 		void set_font_features(const Dictionary &p_features);
 		void set_direction_and_language(TextServer::Direction p_direction, const String &p_language);
-		void set_draw_control_chars(bool p_draw_control_chars);
+		void set_draw_control_chars(bool p_enabled);
 
-		int get_line_height(int p_line, int p_wrap_index) const;
+		int get_line_height() const;
 		int get_line_width(int p_line, int p_wrap_index = -1) const;
-		int get_max_width(bool p_exclude_hidden = false) const;
+		int get_max_width() const;
 
 		void set_width(float p_width);
 		int get_line_wrap_amount(int p_line) const;
@@ -186,15 +195,22 @@ private:
 		Vector<Vector2i> get_line_wrap_ranges(int p_line) const;
 		const Ref<TextParagraph> get_line_data(int p_line) const;
 
-		void set(int p_line, const String &p_text, const Vector<Vector2i> &p_bidi_override);
-		void set_hidden(int p_line, bool p_hidden) { text.write[p_line].hidden = p_hidden; }
+		void set(int p_line, const String &p_text, const Array &p_bidi_override);
+		void set_hidden(int p_line, bool p_hidden) {
+			text.write[p_line].hidden = p_hidden;
+			if (!p_hidden && text[p_line].width > max_width) {
+				max_width = text[p_line].width;
+			} else if (p_hidden && text[p_line].width == max_width) {
+				_calculate_max_line_width();
+			}
+		}
 		bool is_hidden(int p_line) const { return text[p_line].hidden; }
-		void insert(int p_at, const String &p_text, const Vector<Vector2i> &p_bidi_override);
-		void remove(int p_at);
+		void insert(int p_at, const Vector<String> &p_text, const Vector<Array> &p_bidi_override);
+		void remove_range(int p_from_line, int p_to_line);
 		int size() const { return text.size(); }
 		void clear();
 
-		void invalidate_cache(int p_line, int p_column = -1, const String &p_ime_text = String(), const Vector<Vector2i> &p_bidi_override = Vector<Vector2i>());
+		void invalidate_cache(int p_line, int p_column = -1, const String &p_ime_text = String(), const Array &p_bidi_override = Array());
 		void invalidate_all();
 		void invalidate_all_lines();
 
@@ -254,8 +270,9 @@ private:
 	bool context_menu_enabled = true;
 	bool shortcut_keys_enabled = true;
 	bool virtual_keyboard_enabled = true;
+	bool middle_mouse_paste_enabled = true;
 
-	// Overridable actions
+	// Overridable actions.
 	String cut_copy_line = "";
 
 	// Context menu.
@@ -264,7 +281,7 @@ private:
 	PopupMenu *menu_ctl = nullptr;
 
 	void _generate_context_menu();
-	int _get_menu_action_accelerator(const String &p_action);
+	Key _get_menu_action_accelerator(const String &p_action);
 
 	/* Versioning */
 	struct TextOperation {
@@ -289,6 +306,7 @@ private:
 	bool undo_enabled = true;
 	int undo_stack_max_size = 50;
 
+	int complex_operation_count = 0;
 	bool next_operation_is_complex = false;
 
 	TextOperation current_op;
@@ -314,11 +332,19 @@ private:
 	int _get_column_pos_of_word(const String &p_key, const String &p_search, uint32_t p_search_flags, int p_from_column) const;
 
 	/* Tooltip. */
-	Object *tooltip_obj = nullptr;
+	ObjectID tooltip_obj_id;
 	StringName tooltip_func;
 	Variant tooltip_ud;
 
 	/* Mouse */
+	struct LineDrawingCache {
+		int y_offset = 0;
+		Vector<int> first_visible_chars;
+		Vector<int> last_visible_chars;
+	};
+
+	Map<int, LineDrawingCache> line_drawing_cache;
+
 	int _get_char_pos_for_line(int p_px, int p_line, int p_wrap_index = 0) const;
 
 	/* Caret. */
@@ -350,6 +376,9 @@ private:
 
 	bool caret_mid_grapheme_enabled = false;
 
+	bool drag_action = false;
+	bool drag_caret_force_displayed = false;
+
 	void _emit_caret_changed();
 
 	void _reset_caret_blink_timer();
@@ -375,9 +404,11 @@ private:
 		int to_column = 0;
 
 		bool shiftclick_left = false;
+		bool drag_attempt = false;
 	} selection;
 
 	bool selecting_enabled = true;
+	bool deselect_on_focus_loss_enabled = true;
 
 	Color font_selected_color = Color(1, 1, 1);
 	Color selection_color = Color(1, 1, 1);
@@ -397,7 +428,7 @@ private:
 	void _pre_shift_selection();
 	void _post_shift_selection();
 
-	/* line wrapping. */
+	/* Line wrapping. */
 	LineWrappingMode line_wrapping_mode = LineWrappingMode::LINE_WRAPPING_NONE;
 
 	int wrap_at_column = 0;
@@ -437,21 +468,23 @@ private:
 	void _scroll_lines_up();
 	void _scroll_lines_down();
 
-	// Minimap
+	// Minimap.
 	bool draw_minimap = false;
 
 	int minimap_width = 80;
 	Point2 minimap_char_size = Point2(1, 2);
 	int minimap_line_spacing = 1;
 
-	// minimap scroll
+	// Minimap scroll.
 	bool minimap_clicked = false;
+	bool hovering_minimap = false;
 	bool dragging_minimap = false;
 	bool can_drag_minimap = false;
 
 	double minimap_scroll_ratio = 0.0;
 	double minimap_scroll_click_pos = 0.0;
 
+	void _update_minimap_hover();
 	void _update_minimap_click();
 	void _update_minimap_drag();
 
@@ -459,6 +492,7 @@ private:
 	Vector<GutterInfo> gutters;
 	int gutters_width = 0;
 	int gutter_padding = 0;
+	Vector2i hovered_gutter = Vector2i(-1, -1); // X = gutter index, Y = row.
 
 	void _update_gutter_width();
 
@@ -528,7 +562,6 @@ private:
 
 protected:
 	void _notification(int p_what);
-	virtual void _gui_input(const Ref<InputEvent> &p_gui_input);
 
 	static void _bind_methods();
 
@@ -562,18 +595,30 @@ protected:
 	/* Text manipulation */
 
 	// Overridable actions
-	virtual void _handle_unicode_input(const uint32_t p_unicode);
-	virtual void _backspace();
+	virtual void _handle_unicode_input_internal(const uint32_t p_unicode);
+	virtual void _backspace_internal();
 
-	virtual void _cut();
-	virtual void _copy();
-	virtual void _paste();
+	virtual void _cut_internal();
+	virtual void _copy_internal();
+	virtual void _paste_internal();
+	virtual void _paste_primary_clipboard_internal();
+
+	GDVIRTUAL1(_handle_unicode_input, int)
+	GDVIRTUAL0(_backspace)
+	GDVIRTUAL0(_cut)
+	GDVIRTUAL0(_copy)
+	GDVIRTUAL0(_paste)
+	GDVIRTUAL0(_paste_primary_clipboard)
 
 public:
 	/* General overrides. */
+	virtual void gui_input(const Ref<InputEvent> &p_gui_input) override;
 	virtual Size2 get_minimum_size() const override;
 	virtual bool is_text_field() const override;
 	virtual CursorShape get_cursor_shape(const Point2 &p_pos = Point2i()) const override;
+	virtual Variant get_drag_data(const Point2 &p_point) override;
+	virtual bool can_drop_data(const Point2 &p_point, const Variant &p_data) const override;
+	virtual void drop_data(const Point2 &p_point, const Variant &p_data) override;
 	virtual String get_tooltip(const Point2 &p_pos) const override;
 	void set_tooltip_request_func(Object *p_obj, const StringName &p_function, const Variant &p_udata);
 
@@ -606,14 +651,17 @@ public:
 	void set_overtype_mode_enabled(const bool p_enabled);
 	bool is_overtype_mode_enabled() const;
 
-	void set_context_menu_enabled(bool p_enable);
+	void set_context_menu_enabled(bool p_enabled);
 	bool is_context_menu_enabled() const;
 
 	void set_shortcut_keys_enabled(bool p_enabled);
 	bool is_shortcut_keys_enabled() const;
 
-	void set_virtual_keyboard_enabled(bool p_enable);
+	void set_virtual_keyboard_enabled(bool p_enabled);
 	bool is_virtual_keyboard_enabled() const;
+
+	void set_middle_mouse_paste_enabled(bool p_enabled);
+	bool is_middle_mouse_paste_enabled() const;
 
 	// Text manipulation
 	void clear();
@@ -649,6 +697,7 @@ public:
 	void cut();
 	void copy();
 	void paste();
+	void paste_primary_clipboard();
 
 	// Context menu.
 	PopupMenu *get_menu() const;
@@ -659,6 +708,8 @@ public:
 	void begin_complex_operation();
 	void end_complex_operation();
 
+	bool has_undo() const;
+	bool has_redo() const;
 	void undo();
 	void redo();
 	void clear_undo_history();
@@ -681,10 +732,14 @@ public:
 
 	String get_word_at_pos(const Vector2 &p_pos) const;
 
-	Point2i get_line_column_at_pos(const Point2i &p_pos) const;
+	Point2i get_line_column_at_pos(const Point2i &p_pos, bool p_allow_out_of_bounds = true) const;
+	Point2i get_pos_at_line_column(int p_line, int p_column) const;
+	Rect2i get_rect_at_line_column(int p_line, int p_column) const;
+
 	int get_minimap_line_at_pos(const Point2i &p_pos) const;
 
 	bool is_dragging_cursor() const;
+	bool is_mouse_over_selection(bool p_edges = true) const;
 
 	/* Caret */
 	void set_caret_type(CaretType p_type);
@@ -696,7 +751,7 @@ public:
 	void set_caret_blink_speed(const float p_speed);
 	float get_caret_blink_speed() const;
 
-	void set_move_caret_on_right_click_enabled(const bool p_enable);
+	void set_move_caret_on_right_click_enabled(const bool p_enabled);
 	bool is_move_caret_on_right_click_enabled() const;
 
 	void set_caret_mid_grapheme_enabled(const bool p_enabled);
@@ -718,6 +773,9 @@ public:
 	/* Selection. */
 	void set_selecting_enabled(const bool p_enabled);
 	bool is_selecting_enabled() const;
+
+	void set_deselect_on_focus_loss_enabled(const bool p_enabled);
+	bool is_deselect_on_focus_loss_enabled() const;
 
 	void set_override_selected_font_color(bool p_override_selected_font_color);
 	bool is_overriding_selected_font_color() const;
@@ -744,7 +802,7 @@ public:
 	void deselect();
 	void delete_selection();
 
-	/* line wrapping. */
+	/* Line wrapping. */
 	void set_line_wrapping_mode(LineWrappingMode p_wrapping_mode);
 	LineWrappingMode get_line_wrapping_mode() const;
 
@@ -756,7 +814,7 @@ public:
 
 	/* Viewport. */
 	// Scrolling.
-	void set_smooth_scroll_enabled(const bool p_enable);
+	void set_smooth_scroll_enabled(const bool p_enabled);
 	bool is_smooth_scroll_enabled() const;
 
 	void set_scroll_past_end_of_file_enabled(const bool p_enabled);
@@ -784,6 +842,7 @@ public:
 	int get_last_full_visible_line_wrap_index() const;
 
 	int get_visible_line_count() const;
+	int get_visible_line_count_in_range(int p_from, int p_to) const;
 	int get_total_visible_line_count() const;
 
 	// Auto Adjust
@@ -791,7 +850,7 @@ public:
 	void center_viewport_to_caret();
 
 	// Minimap
-	void set_draw_minimap(bool p_draw);
+	void set_draw_minimap(bool p_enabled);
 	bool is_drawing_minimap() const;
 
 	void set_minimap_width(int p_minimap_width);
@@ -858,13 +917,13 @@ public:
 	void set_highlight_all_occurrences(const bool p_enabled);
 	bool is_highlight_all_occurrences_enabled() const;
 
-	void set_draw_control_chars(bool p_draw_control_chars);
+	void set_draw_control_chars(bool p_enabled);
 	bool get_draw_control_chars() const;
 
-	void set_draw_tabs(bool p_draw);
+	void set_draw_tabs(bool p_enabled);
 	bool is_drawing_tabs() const;
 
-	void set_draw_spaces(bool p_draw);
+	void set_draw_spaces(bool p_enabled);
 	bool is_drawing_spaces() const;
 
 	TextEdit();

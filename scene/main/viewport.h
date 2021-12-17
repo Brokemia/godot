@@ -37,10 +37,11 @@
 #ifndef _3D_DISABLED
 class Camera3D;
 class CollisionObject3D;
-class Listener3D;
+class AudioListener3D;
 class World3D;
 #endif // _3D_DISABLED
 
+class AudioListener2D;
 class Camera2D;
 class CanvasItem;
 class CanvasLayer;
@@ -88,6 +89,12 @@ class Viewport : public Node {
 	GDCLASS(Viewport, Node);
 
 public:
+	enum Scaling3DMode {
+		SCALING_3D_MODE_BILINEAR,
+		SCALING_3D_MODE_FSR,
+		SCALING_3D_MODE_MAX
+	};
+
 	enum ShadowAtlasQuadrantSubdiv {
 		SHADOW_ATLAS_QUADRANT_SUBDIV_DISABLED,
 		SHADOW_ATLAS_QUADRANT_SUBDIV_1,
@@ -104,7 +111,7 @@ public:
 		MSAA_2X,
 		MSAA_4X,
 		MSAA_8X,
-		MSAA_16X,
+		// 16x MSAA is not supported due to its high cost and driver bugs.
 		MSAA_MAX
 	};
 
@@ -193,6 +200,7 @@ private:
 
 	Viewport *parent = nullptr;
 
+	AudioListener2D *audio_listener_2d = nullptr;
 	Camera2D *camera_2d = nullptr;
 	Set<CanvasLayer *> canvas_layers;
 
@@ -200,8 +208,8 @@ private:
 	RID current_canvas;
 	RID subwindow_canvas;
 
-	bool audio_listener_2d = false;
-	RID internal_listener_2d;
+	bool is_audio_listener_2d_enabled = false;
+	RID internal_audio_listener_2d;
 
 	bool override_canvas_transform = false;
 
@@ -242,7 +250,7 @@ private:
 		bool control = false;
 		bool shift = false;
 		bool meta = false;
-		int mouse_mask = 0;
+		MouseButton mouse_mask = MouseButton::NONE;
 
 	} physics_last_mouse_state;
 
@@ -264,7 +272,7 @@ private:
 	StringName unhandled_input_group;
 	StringName unhandled_key_input_group;
 
-	void _update_listener_2d();
+	void _update_audio_listener_2d();
 
 	bool disable_3d = false;
 
@@ -282,6 +290,11 @@ private:
 
 	MSAA msaa = MSAA_DISABLED;
 	ScreenSpaceAA screen_space_aa = SCREEN_SPACE_AA_DISABLED;
+
+	Scaling3DMode scaling_3d_mode = SCALING_3D_MODE_BILINEAR;
+	float scaling_3d_scale = 1.0;
+	float fsr_sharpness = 0.2f;
+	float fsr_mipmap_bias = 0.0f;
 	bool use_debanding = false;
 	float lod_threshold = 1.0;
 	bool use_occlusion_culling = false;
@@ -325,7 +338,7 @@ private:
 		Control *mouse_focus = nullptr;
 		Control *last_mouse_focus = nullptr;
 		Control *mouse_click_grabber = nullptr;
-		int mouse_focus_mask = 0;
+		MouseButton mouse_focus_mask = MouseButton::NONE;
 		Control *key_focus = nullptr;
 		Control *mouse_over = nullptr;
 		Control *drag_mouse_over = nullptr;
@@ -346,6 +359,7 @@ private:
 		List<Control *> roots;
 		int canvas_sort_index = 0; //for sorting items with canvas as root
 		bool dragging = false;
+		bool drag_successful = false;
 		bool embed_subwindows_hint = false;
 		bool embedding_subwindows = false;
 
@@ -408,6 +422,10 @@ private:
 
 	bool _gui_drop(Control *p_at_control, Point2 p_at_pos, bool p_just_check);
 
+	friend class AudioListener2D;
+	void _audio_listener_2d_set(AudioListener2D *p_listener);
+	void _audio_listener_2d_remove(AudioListener2D *p_listener);
+
 	friend class Camera2D;
 	void _camera_2d_set(Camera2D *p_camera_2d);
 
@@ -449,6 +467,7 @@ protected:
 public:
 	uint64_t get_processed_events_count() const { return event_count; }
 
+	AudioListener2D *get_audio_listener_2d() const;
 	Camera2D *get_camera_2d() const;
 	void set_as_audio_listener_2d(bool p_enable);
 	bool is_audio_listener_2d() const;
@@ -496,6 +515,18 @@ public:
 	void set_screen_space_aa(ScreenSpaceAA p_screen_space_aa);
 	ScreenSpaceAA get_screen_space_aa() const;
 
+	void set_scaling_3d_mode(Scaling3DMode p_scaling_3d_mode);
+	Scaling3DMode get_scaling_3d_mode() const;
+
+	void set_scaling_3d_scale(float p_scaling_3d_scale);
+	float get_scaling_3d_scale() const;
+
+	void set_fsr_sharpness(float p_fsr_sharpness);
+	float get_fsr_sharpness() const;
+
+	void set_fsr_mipmap_bias(float p_fsr_mipmap_bias);
+	float get_fsr_mipmap_bias() const;
+
 	void set_use_debanding(bool p_use_debanding);
 	bool is_using_debanding() const;
 
@@ -508,9 +539,9 @@ public:
 	Vector2 get_camera_coords(const Vector2 &p_viewport_coords) const;
 	Vector2 get_camera_rect_size() const;
 
-	void input_text(const String &p_text);
-	void input(const Ref<InputEvent> &p_event, bool p_local_coords = false);
-	void unhandled_input(const Ref<InputEvent> &p_event, bool p_local_coords = false);
+	void push_text_input(const String &p_text);
+	void push_input(const Ref<InputEvent> &p_event, bool p_local_coords = false);
+	void push_unhandled_input(const Ref<InputEvent> &p_event, bool p_local_coords = false);
 
 	void set_disable_input(bool p_disable);
 	bool is_input_disabled() const;
@@ -549,6 +580,7 @@ public:
 	bool is_handling_input_locally() const;
 
 	bool gui_is_dragging() const;
+	bool gui_is_drag_successful() const;
 
 	Control *gui_find_control(const Point2 &p_global);
 
@@ -577,20 +609,20 @@ public:
 
 #ifndef _3D_DISABLED
 	bool use_xr = false;
-	friend class Listener3D;
-	Listener3D *listener_3d = nullptr;
-	Set<Listener3D *> listener_3d_set;
-	bool audio_listener_3d = false;
-	RID internal_listener_3d;
-	Listener3D *get_listener_3d() const;
+	friend class AudioListener3D;
+	AudioListener3D *audio_listener_3d = nullptr;
+	Set<AudioListener3D *> audio_listener_3d_set;
+	bool is_audio_listener_3d_enabled = false;
+	RID internal_audio_listener_3d;
+	AudioListener3D *get_audio_listener_3d() const;
 	void set_as_audio_listener_3d(bool p_enable);
 	bool is_audio_listener_3d() const;
-	void _update_listener_3d();
+	void _update_audio_listener_3d();
 	void _listener_transform_3d_changed_notify();
-	void _listener_3d_set(Listener3D *p_listener);
-	bool _listener_3d_add(Listener3D *p_listener); //true if first
-	void _listener_3d_remove(Listener3D *p_listener);
-	void _listener_3d_make_next_current(Listener3D *p_exclude);
+	void _audio_listener_3d_set(AudioListener3D *p_listener);
+	bool _audio_listener_3d_add(AudioListener3D *p_listener); //true if first
+	void _audio_listener_3d_remove(AudioListener3D *p_listener);
+	void _audio_listener_3d_make_next_current(AudioListener3D *p_exclude);
 
 	void _collision_object_3d_input_event(CollisionObject3D *p_object, Camera3D *p_camera, const Ref<InputEvent> &p_input_event, const Vector3 &p_pos, const Vector3 &p_normal, int p_shape);
 
@@ -701,6 +733,7 @@ public:
 	SubViewport();
 	~SubViewport();
 };
+VARIANT_ENUM_CAST(Viewport::Scaling3DMode);
 VARIANT_ENUM_CAST(SubViewport::UpdateMode);
 VARIANT_ENUM_CAST(Viewport::ShadowAtlasQuadrantSubdiv);
 VARIANT_ENUM_CAST(Viewport::MSAA);

@@ -370,7 +370,7 @@ void VisualScriptFunctionCall::_update_method_cache() {
 
 	} else if (call_mode == CALL_MODE_INSTANCE) {
 		type = base_type;
-		if (base_script != String()) {
+		if (!base_script.is_empty()) {
 			if (!ResourceCache::has(base_script) && ScriptServer::edit_request_func) {
 				ScriptServer::edit_request_func(base_script); //make sure it's loaded
 			}
@@ -514,7 +514,7 @@ Dictionary VisualScriptFunctionCall::_get_argument_cache() const {
 void VisualScriptFunctionCall::_validate_property(PropertyInfo &property) const {
 	if (property.name == "base_type") {
 		if (call_mode != CALL_MODE_INSTANCE) {
-			property.usage = PROPERTY_USAGE_NOEDITOR | PROPERTY_USAGE_INTERNAL;
+			property.usage = PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL;
 		}
 	}
 
@@ -539,7 +539,7 @@ void VisualScriptFunctionCall::_validate_property(PropertyInfo &property) const 
 			property.hint = PROPERTY_HINT_ENUM;
 			String sl;
 			for (const Engine::Singleton &E : names) {
-				if (sl != String()) {
+				if (!sl.is_empty()) {
 					sl += ",";
 				}
 				sl += E.name;
@@ -580,7 +580,7 @@ void VisualScriptFunctionCall::_validate_property(PropertyInfo &property) const 
 			property.hint = PROPERTY_HINT_METHOD_OF_BASE_TYPE;
 			property.hint_string = base_type;
 
-			if (base_script != String()) {
+			if (!base_script.is_empty()) {
 				if (!ResourceCache::has(base_script) && ScriptServer::edit_request_func) {
 					ScriptServer::edit_request_func(base_script); //make sure it's loaded
 				}
@@ -684,7 +684,7 @@ void VisualScriptFunctionCall::_bind_methods() {
 
 	String script_ext_hint;
 	for (const String &E : script_extensions) {
-		if (script_ext_hint != String()) {
+		if (!script_ext_hint.is_empty()) {
 			script_ext_hint += ",";
 		}
 		script_ext_hint += "*." + E;
@@ -696,7 +696,7 @@ void VisualScriptFunctionCall::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "singleton"), "set_singleton", "get_singleton");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "basic_type", PROPERTY_HINT_ENUM, bt), "set_basic_type", "get_basic_type");
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "node_path", PROPERTY_HINT_NODE_PATH_TO_EDITED_NODE), "set_base_path", "get_base_path");
-	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "argument_cache", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NOEDITOR | PROPERTY_USAGE_INTERNAL), "_set_argument_cache", "_get_argument_cache");
+	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "argument_cache", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_argument_cache", "_get_argument_cache");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "function"), "set_function", "get_function"); //when set, if loaded properly, will override argument count.
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "use_default_args"), "set_use_default_args", "get_use_default_args");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "validate"), "set_validate", "get_validate");
@@ -1010,7 +1010,7 @@ PropertyInfo VisualScriptPropertySet::get_input_value_port_info(int p_idx) const
 			if (index != StringName()) {
 				detail_prop_name += "." + String(index);
 			}
-			PropertyInfo pinfo = PropertyInfo(E.type, detail_prop_name, PROPERTY_HINT_TYPE_STRING, E.hint_string);
+			PropertyInfo pinfo = PropertyInfo(E.type, detail_prop_name, E.hint, E.hint_string);
 			_adjust_input_index(pinfo);
 			return pinfo;
 		}
@@ -1161,7 +1161,7 @@ void VisualScriptPropertySet::_update_cache() {
 			}
 		} else if (call_mode == CALL_MODE_INSTANCE) {
 			type = base_type;
-			if (base_script != String()) {
+			if (!base_script.is_empty()) {
 				if (!ResourceCache::has(base_script) && ScriptServer::edit_request_func) {
 					ScriptServer::edit_request_func(base_script); //make sure it's loaded
 				}
@@ -1282,7 +1282,7 @@ VisualScriptPropertySet::AssignOp VisualScriptPropertySet::get_assign_op() const
 void VisualScriptPropertySet::_validate_property(PropertyInfo &property) const {
 	if (property.name == "base_type") {
 		if (call_mode != CALL_MODE_INSTANCE) {
-			property.usage = PROPERTY_USAGE_NOEDITOR | PROPERTY_USAGE_INTERNAL;
+			property.usage = PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL;
 		}
 	}
 
@@ -1321,7 +1321,7 @@ void VisualScriptPropertySet::_validate_property(PropertyInfo &property) const {
 			property.hint = PROPERTY_HINT_PROPERTY_OF_BASE_TYPE;
 			property.hint_string = base_type;
 
-			if (base_script != String()) {
+			if (!base_script.is_empty()) {
 				if (!ResourceCache::has(base_script) && ScriptServer::edit_request_func) {
 					ScriptServer::edit_request_func(base_script); //make sure it's loaded
 				}
@@ -1361,7 +1361,7 @@ void VisualScriptPropertySet::_validate_property(PropertyInfo &property) const {
 		property.hint = PROPERTY_HINT_ENUM;
 		property.hint_string = options;
 		property.type = Variant::STRING;
-		if (options == "") {
+		if (options.is_empty()) {
 			property.usage = PROPERTY_USAGE_NONE; //hide if type has no usable index
 		}
 	}
@@ -1411,7 +1411,7 @@ void VisualScriptPropertySet::_bind_methods() {
 
 	String script_ext_hint;
 	for (const String &E : script_extensions) {
-		if (script_ext_hint != String()) {
+		if (!script_ext_hint.is_empty()) {
 			script_ext_hint += ",";
 		}
 		script_ext_hint += "*." + E;
@@ -1420,7 +1420,7 @@ void VisualScriptPropertySet::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "set_mode", PROPERTY_HINT_ENUM, "Self,Node Path,Instance,Basic Type"), "set_call_mode", "get_call_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "base_type", PROPERTY_HINT_TYPE_STRING, "Object"), "set_base_type", "get_base_type");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "base_script", PROPERTY_HINT_FILE, script_ext_hint), "set_base_script", "get_base_script");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "type_cache", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NOEDITOR | PROPERTY_USAGE_INTERNAL), "_set_type_cache", "_get_type_cache");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "type_cache", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_type_cache", "_get_type_cache");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "basic_type", PROPERTY_HINT_ENUM, bt), "set_basic_type", "get_basic_type");
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "node_path", PROPERTY_HINT_NODE_PATH_TO_EDITED_NODE), "set_base_path", "get_base_path");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "property"), "set_property", "get_property");
@@ -1847,7 +1847,7 @@ void VisualScriptPropertyGet::_update_cache() {
 			}
 		} else if (call_mode == CALL_MODE_INSTANCE) {
 			type = base_type;
-			if (base_script != String()) {
+			if (!base_script.is_empty()) {
 				if (!ResourceCache::has(base_script) && ScriptServer::edit_request_func) {
 					ScriptServer::edit_request_func(base_script); //make sure it's loaded
 				}
@@ -1988,7 +1988,7 @@ StringName VisualScriptPropertyGet::get_index() const {
 void VisualScriptPropertyGet::_validate_property(PropertyInfo &property) const {
 	if (property.name == "base_type") {
 		if (call_mode != CALL_MODE_INSTANCE) {
-			property.usage = PROPERTY_USAGE_NOEDITOR | PROPERTY_USAGE_INTERNAL;
+			property.usage = PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL;
 		}
 	}
 
@@ -2027,7 +2027,7 @@ void VisualScriptPropertyGet::_validate_property(PropertyInfo &property) const {
 			property.hint = PROPERTY_HINT_PROPERTY_OF_BASE_TYPE;
 			property.hint_string = base_type;
 
-			if (base_script != String()) {
+			if (!base_script.is_empty()) {
 				if (!ResourceCache::has(base_script) && ScriptServer::edit_request_func) {
 					ScriptServer::edit_request_func(base_script); //make sure it's loaded
 				}
@@ -2066,7 +2066,7 @@ void VisualScriptPropertyGet::_validate_property(PropertyInfo &property) const {
 		property.hint = PROPERTY_HINT_ENUM;
 		property.hint_string = options;
 		property.type = Variant::STRING;
-		if (options == "") {
+		if (options.is_empty()) {
 			property.usage = PROPERTY_USAGE_NONE; //hide if type has no usable index
 		}
 	}
@@ -2113,7 +2113,7 @@ void VisualScriptPropertyGet::_bind_methods() {
 
 	String script_ext_hint;
 	for (const String &E : script_extensions) {
-		if (script_ext_hint != String()) {
+		if (!script_ext_hint.is_empty()) {
 			script_ext_hint += ",";
 		}
 		script_ext_hint += "." + E;
@@ -2122,7 +2122,7 @@ void VisualScriptPropertyGet::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "set_mode", PROPERTY_HINT_ENUM, "Self,Node Path,Instance,Basic Type"), "set_call_mode", "get_call_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "base_type", PROPERTY_HINT_TYPE_STRING, "Object"), "set_base_type", "get_base_type");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "base_script", PROPERTY_HINT_FILE, script_ext_hint), "set_base_script", "get_base_script");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "type_cache", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NOEDITOR | PROPERTY_USAGE_INTERNAL), "_set_type_cache", "_get_type_cache");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "type_cache", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "_set_type_cache", "_get_type_cache");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "basic_type", PROPERTY_HINT_ENUM, bt), "set_basic_type", "get_basic_type");
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "node_path", PROPERTY_HINT_NODE_PATH_TO_EDITED_NODE), "set_base_path", "get_base_path");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "property"), "set_property", "get_property");
@@ -2324,7 +2324,7 @@ void VisualScriptEmitSignal::_validate_property(PropertyInfo &property) const {
 
 		String ml;
 		for (const StringName &E : sigs) {
-			if (ml != String()) {
+			if (!ml.is_empty()) {
 				ml += ",";
 			}
 			ml += E;

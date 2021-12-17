@@ -87,11 +87,6 @@ class EditorExportPlatformAndroid : public EditorExportPlatform {
 		EditorProgress *ep = nullptr;
 	};
 
-	struct CustomExportData {
-		bool debug;
-		Vector<String> libs;
-	};
-
 	Vector<PluginConfigAndroid> plugins;
 	String last_plugin_names;
 	uint64_t last_custom_build_time = 0;
@@ -108,6 +103,8 @@ class EditorExportPlatformAndroid : public EditorExportPlatform {
 	String get_project_name(const String &p_name) const;
 
 	String get_package_name(const String &p_package) const;
+
+	String get_assets_directory(const Ref<EditorExportPreset> &p_preset, int p_export_format) const;
 
 	bool is_package_name_valid(const String &p_package, String *r_error = nullptr) const;
 
@@ -133,6 +130,8 @@ class EditorExportPlatformAndroid : public EditorExportPlatform {
 	static Error ignore_apk_file(void *p_userdata, const String &p_path, const Vector<uint8_t> &p_data, int p_file, int p_total, const Vector<String> &p_enc_in_filters, const Vector<String> &p_enc_ex_filters, const Vector<uint8_t> &p_key);
 
 	static Error copy_gradle_so(void *p_userdata, const SharedObject &p_so);
+
+	bool _has_storage_permission(const Vector<String> &p_permissions);
 
 	void _get_permissions(const Ref<EditorExportPreset> &p_preset, bool p_give_internet, Vector<String> &r_permissions);
 

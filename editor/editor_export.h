@@ -240,7 +240,7 @@ public:
 
 	virtual void get_export_options(List<ExportOption> *r_options) = 0;
 	virtual bool should_update_export_options() { return false; }
-	virtual bool get_option_visibility(const String &p_option, const Map<StringName, Variant> &p_options) const { return true; }
+	virtual bool get_export_option_visibility(const String &p_option, const Map<StringName, Variant> &p_options) const { return true; }
 
 	virtual String get_os_name() const = 0;
 	virtual String get_name() const = 0;
@@ -348,6 +348,10 @@ protected:
 	virtual void _export_begin(const Set<String> &p_features, bool p_debug, const String &p_path, int p_flags);
 
 	static void _bind_methods();
+
+	GDVIRTUAL3(_export_file, String, String, Vector<String>)
+	GDVIRTUAL4(_export_begin, Vector<String>, bool, String, uint32_t)
+	GDVIRTUAL0(_export_end)
 
 public:
 	Vector<String> get_ios_frameworks() const;

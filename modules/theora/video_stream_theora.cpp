@@ -108,7 +108,7 @@ void VideoStreamPlaybackTheora::video_write() {
 
 	Ref<Image> img = memnew(Image(size.x, size.y, 0, Image::FORMAT_RGBA8, frame_data)); //zero copy image creation
 
-	texture->update(img); //zero copy send to visual server
+	texture->update(img); //zero copy send to rendering server
 
 	frames_pending = 1;
 }
@@ -603,7 +603,7 @@ float VideoStreamPlaybackTheora::get_playback_position() const {
 };
 
 void VideoStreamPlaybackTheora::seek(float p_time) {
-	WARN_PRINT_ONCE("Seeking in Theora and WebM videos is not implemented yet (it's only supported for GDNative-provided video streams).");
+	WARN_PRINT_ONCE("Seeking in Theora videos is not implemented yet (it's only supported for GDNative-provided video streams).");
 }
 
 void VideoStreamPlaybackTheora::set_mix_callback(AudioMixCallback p_callback, void *p_userdata) {
@@ -673,7 +673,7 @@ void VideoStreamTheora::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_file", "file"), &VideoStreamTheora::set_file);
 	ClassDB::bind_method(D_METHOD("get_file"), &VideoStreamTheora::get_file);
 
-	ADD_PROPERTY(PropertyInfo(Variant::STRING, "file", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NOEDITOR | PROPERTY_USAGE_INTERNAL), "set_file", "get_file");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING, "file", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_INTERNAL), "set_file", "get_file");
 }
 
 ////////////

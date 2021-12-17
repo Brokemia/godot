@@ -237,6 +237,43 @@ RID EffectsRD::_get_compute_uniform_set_from_image_pair(RID p_texture1, RID p_te
 	return uniform_set;
 }
 
+void EffectsRD::fsr_upscale(RID p_source_rd_texture, RID p_secondary_texture, RID p_destination_texture, const Size2i &p_internal_size, const Size2i &p_size, float p_fsr_upscale_sharpness) {
+	memset(&FSR_upscale.push_constant, 0, sizeof(FSRUpscalePushConstant));
+
+	int dispatch_x = (p_size.x + 15) / 16;
+	int dispatch_y = (p_size.y + 15) / 16;
+
+	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, FSR_upscale.pipeline);
+
+	FSR_upscale.push_constant.resolution_width = p_internal_size.width;
+	FSR_upscale.push_constant.resolution_height = p_internal_size.height;
+	FSR_upscale.push_constant.upscaled_width = p_size.width;
+	FSR_upscale.push_constant.upscaled_height = p_size.height;
+	FSR_upscale.push_constant.sharpness = p_fsr_upscale_sharpness;
+
+	//FSR Easc
+	FSR_upscale.push_constant.pass = FSR_UPSCALE_PASS_EASU;
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_source_rd_texture), 0);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_secondary_texture), 1);
+
+	RD::get_singleton()->compute_list_set_push_constant(compute_list, &FSR_upscale.push_constant, sizeof(FSRUpscalePushConstant));
+
+	RD::get_singleton()->compute_list_dispatch(compute_list, dispatch_x, dispatch_y, 1);
+	RD::get_singleton()->compute_list_add_barrier(compute_list);
+
+	//FSR Rcas
+	FSR_upscale.push_constant.pass = FSR_UPSCALE_PASS_RCAS;
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_compute_uniform_set_from_texture(p_secondary_texture), 0);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, _get_uniform_set_from_image(p_destination_texture), 1);
+
+	RD::get_singleton()->compute_list_set_push_constant(compute_list, &FSR_upscale.push_constant, sizeof(FSRUpscalePushConstant));
+
+	RD::get_singleton()->compute_list_dispatch(compute_list, dispatch_x, dispatch_y, 1);
+
+	RD::get_singleton()->compute_list_end(compute_list);
+}
+
 void EffectsRD::copy_to_atlas_fb(RID p_source_rd_texture, RID p_dest_framebuffer, const Rect2 &p_uv_rect, RD::DrawListID p_draw_list, bool p_flip_y, bool p_panorama) {
 	memset(&copy_to_fb.push_constant, 0, sizeof(CopyToFbPushConstant));
 
@@ -443,7 +480,7 @@ void EffectsRD::gaussian_blur(RID p_source_rd_texture, RID p_texture, RID p_back
 	RD::get_singleton()->compute_list_end();
 }
 
-void EffectsRD::gaussian_glow(RID p_source_rd_texture, RID p_back_texture, const Size2i &p_size, float p_strength, bool p_high_quality, bool p_first_pass, float p_luminance_cap, float p_exposure, float p_bloom, float p_hdr_bleed_treshold, float p_hdr_bleed_scale, RID p_auto_exposure, float p_auto_exposure_grey) {
+void EffectsRD::gaussian_glow(RID p_source_rd_texture, RID p_back_texture, const Size2i &p_size, float p_strength, bool p_high_quality, bool p_first_pass, float p_luminance_cap, float p_exposure, float p_bloom, float p_hdr_bleed_threshold, float p_hdr_bleed_scale, RID p_auto_exposure, float p_auto_exposure_grey) {
 	ERR_FAIL_COND_MSG(prefer_raster_effects, "Can't use the compute version of the gaussian glow with the mobile renderer.");
 
 	memset(&copy.push_constant, 0, sizeof(CopyPushConstant));
@@ -456,7 +493,7 @@ void EffectsRD::gaussian_glow(RID p_source_rd_texture, RID p_back_texture, const
 
 	copy.push_constant.glow_strength = p_strength;
 	copy.push_constant.glow_bloom = p_bloom;
-	copy.push_constant.glow_hdr_threshold = p_hdr_bleed_treshold;
+	copy.push_constant.glow_hdr_threshold = p_hdr_bleed_threshold;
 	copy.push_constant.glow_hdr_scale = p_hdr_bleed_scale;
 	copy.push_constant.glow_exposure = p_exposure;
 	copy.push_constant.glow_white = 0; //actually unused
@@ -479,7 +516,7 @@ void EffectsRD::gaussian_glow(RID p_source_rd_texture, RID p_back_texture, const
 	RD::get_singleton()->compute_list_end();
 }
 
-void EffectsRD::gaussian_glow_raster(RID p_source_rd_texture, RID p_framebuffer_half, RID p_rd_texture_half, RID p_dest_framebuffer, const Vector2 &p_pixel_size, float p_strength, bool p_high_quality, bool p_first_pass, float p_luminance_cap, float p_exposure, float p_bloom, float p_hdr_bleed_treshold, float p_hdr_bleed_scale, RID p_auto_exposure, float p_auto_exposure_grey) {
+void EffectsRD::gaussian_glow_raster(RID p_source_rd_texture, RID p_framebuffer_half, RID p_rd_texture_half, RID p_dest_framebuffer, const Vector2 &p_pixel_size, float p_strength, bool p_high_quality, bool p_first_pass, float p_luminance_cap, float p_exposure, float p_bloom, float p_hdr_bleed_threshold, float p_hdr_bleed_scale, RID p_auto_exposure, float p_auto_exposure_grey) {
 	ERR_FAIL_COND_MSG(!prefer_raster_effects, "Can't use the raster version of the gaussian glow with the clustered renderer.");
 
 	memset(&blur_raster.push_constant, 0, sizeof(BlurRasterPushConstant));
@@ -492,7 +529,7 @@ void EffectsRD::gaussian_glow_raster(RID p_source_rd_texture, RID p_framebuffer_
 
 	blur_raster.push_constant.glow_strength = p_strength;
 	blur_raster.push_constant.glow_bloom = p_bloom;
-	blur_raster.push_constant.glow_hdr_threshold = p_hdr_bleed_treshold;
+	blur_raster.push_constant.glow_hdr_threshold = p_hdr_bleed_threshold;
 	blur_raster.push_constant.glow_hdr_scale = p_hdr_bleed_scale;
 	blur_raster.push_constant.glow_exposure = p_exposure;
 	blur_raster.push_constant.glow_white = 0; //actually unused
@@ -759,7 +796,7 @@ void EffectsRD::make_mipmap_raster(RID p_source_rd_texture, RID p_dest_framebuff
 	RD::get_singleton()->draw_list_end();
 }
 
-void EffectsRD::copy_cubemap_to_dp(RID p_source_rd_texture, RID p_dst_framebuffer, const Rect2 &p_rect, float p_z_near, float p_z_far, bool p_dp_flip) {
+void EffectsRD::copy_cubemap_to_dp(RID p_source_rd_texture, RID p_dst_framebuffer, const Rect2 &p_rect, const Vector2 &p_dst_size, float p_z_near, float p_z_far, bool p_dp_flip) {
 	CopyToDPPushConstant push_constant;
 	push_constant.screen_rect[0] = p_rect.position.x;
 	push_constant.screen_rect[1] = p_rect.position.y;
@@ -767,7 +804,9 @@ void EffectsRD::copy_cubemap_to_dp(RID p_source_rd_texture, RID p_dst_framebuffe
 	push_constant.screen_rect[3] = p_rect.size.height;
 	push_constant.z_far = p_z_far;
 	push_constant.z_near = p_z_near;
-	push_constant.z_flip = p_dp_flip;
+	push_constant.texel_size[0] = 1.0f / p_dst_size.x;
+	push_constant.texel_size[1] = 1.0f / p_dst_size.y;
+	push_constant.texel_size[0] *= p_dp_flip ? -1.0f : 1.0f; // Encode dp flip as x size sign
 
 	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_dst_framebuffer, RD::INITIAL_ACTION_DROP, RD::FINAL_ACTION_DISCARD, RD::INITIAL_ACTION_KEEP, RD::FINAL_ACTION_READ);
 	RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, cube_to_dp.pipeline.get_render_pipeline(RD::INVALID_ID, RD::get_singleton()->framebuffer_get_format(p_dst_framebuffer)));
@@ -810,6 +849,7 @@ void EffectsRD::tonemapper(RID p_source_color, RID p_dst_framebuffer, const Tone
 	tonemap.push_constant.exposure = p_settings.exposure;
 	tonemap.push_constant.white = p_settings.white;
 	tonemap.push_constant.auto_exposure_grey = p_settings.auto_exposure_grey;
+	tonemap.push_constant.luminance_multiplier = p_settings.luminance_multiplier;
 
 	tonemap.push_constant.use_color_correction = p_settings.use_color_correction;
 
@@ -862,6 +902,7 @@ void EffectsRD::tonemapper(RD::DrawListID p_subpass_draw_list, RID p_source_colo
 	tonemap.push_constant.use_color_correction = p_settings.use_color_correction;
 
 	tonemap.push_constant.use_debanding = p_settings.use_debanding;
+	tonemap.push_constant.luminance_multiplier = p_settings.luminance_multiplier;
 
 	RD::get_singleton()->draw_list_bind_render_pipeline(p_subpass_draw_list, tonemap.pipelines[mode].get_render_pipeline(RD::INVALID_ID, p_dst_format_id, false, RD::get_singleton()->draw_list_get_current_pass()));
 	RD::get_singleton()->draw_list_bind_uniform_set(p_subpass_draw_list, _get_uniform_set_for_input(p_source_color), 0);
@@ -1396,6 +1437,7 @@ void EffectsRD::generate_ssao(RID p_depth_buffer, RID p_normal_buffer, RID p_dep
 		ssao.gather_push_constant.half_screen_pixel_size_x025[0] = ssao.gather_push_constant.half_screen_pixel_size[0] * 0.25;
 		ssao.gather_push_constant.half_screen_pixel_size_x025[1] = ssao.gather_push_constant.half_screen_pixel_size[1] * 0.25;
 
+		ssao.gather_push_constant.radius = p_settings.radius;
 		float radius_near_limit = (p_settings.radius * 1.2f);
 		if (p_settings.quality <= RS::ENV_SSAO_QUALITY_LOW) {
 			radius_near_limit *= 1.50f;
@@ -1403,12 +1445,8 @@ void EffectsRD::generate_ssao(RID p_depth_buffer, RID p_normal_buffer, RID p_dep
 			if (p_settings.quality == RS::ENV_SSAO_QUALITY_VERY_LOW) {
 				ssao.gather_push_constant.radius *= 0.8f;
 			}
-			if (p_settings.half_size) {
-				ssao.gather_push_constant.radius *= 0.5f;
-			}
 		}
 		radius_near_limit /= tan_half_fov_y;
-		ssao.gather_push_constant.radius = p_settings.radius;
 		ssao.gather_push_constant.intensity = p_settings.intensity;
 		ssao.gather_push_constant.shadow_power = p_settings.power;
 		ssao.gather_push_constant.shadow_clamp = 0.98;
@@ -1887,6 +1925,27 @@ void EffectsRD::sort_buffer(RID p_uniform_set, int p_size) {
 }
 
 EffectsRD::EffectsRD(bool p_prefer_raster_effects) {
+	{
+		Vector<String> FSR_upscale_modes;
+
+#if defined(OSX_ENABLED) || defined(IPHONE_ENABLED)
+		// MoltenVK does not support some of the operations used by the normal mode of FSR. Fallback works just fine though.
+		FSR_upscale_modes.push_back("\n#define MODE_FSR_UPSCALE_FALLBACK\n");
+#else
+		// Everyone else can use normal mode when available.
+		if (RD::get_singleton()->get_device_capabilities()->supports_fsr_half_float) {
+			FSR_upscale_modes.push_back("\n#define MODE_FSR_UPSCALE_NORMAL\n");
+		} else {
+			FSR_upscale_modes.push_back("\n#define MODE_FSR_UPSCALE_FALLBACK\n");
+		}
+#endif
+
+		FSR_upscale.shader.initialize(FSR_upscale_modes);
+
+		FSR_upscale.shader_version = FSR_upscale.shader.version_create();
+		FSR_upscale.pipeline = RD::get_singleton()->compute_pipeline_create(FSR_upscale.shader.version_get_shader(FSR_upscale.shader_version, 0));
+	}
+
 	prefer_raster_effects = p_prefer_raster_effects;
 
 	if (prefer_raster_effects) {
@@ -1914,7 +1973,7 @@ EffectsRD::EffectsRD(bool p_prefer_raster_effects) {
 		}
 	}
 
-	{ // Initialize copy
+	if (!prefer_raster_effects) { // Initialize copy
 		Vector<String> copy_modes;
 		copy_modes.push_back("\n#define MODE_GAUSSIAN_BLUR\n");
 		copy_modes.push_back("\n#define MODE_GAUSSIAN_BLUR\n#define DST_IMAGE_8BIT\n");
@@ -2098,10 +2157,9 @@ EffectsRD::EffectsRD(bool p_prefer_raster_effects) {
 		}
 	} else {
 		bokeh.compute_shader.initialize(bokeh_modes);
-
-		bokeh.shader_version = bokeh.compute_shader.version_create();
 		bokeh.compute_shader.set_variant_enabled(BOKEH_GEN_BOKEH_BOX_NOWEIGHT, false);
 		bokeh.compute_shader.set_variant_enabled(BOKEH_GEN_BOKEH_HEXAGONAL_NOWEIGHT, false);
+		bokeh.shader_version = bokeh.compute_shader.version_create();
 
 		for (int i = 0; i < BOKEH_MAX; i++) {
 			if (bokeh.compute_shader.is_variant_enabled(i)) {
@@ -2114,7 +2172,7 @@ EffectsRD::EffectsRD(bool p_prefer_raster_effects) {
 		}
 	}
 
-	{
+	if (!prefer_raster_effects) {
 		// Initialize ssao
 
 		RD::SamplerState sampler;
@@ -2170,10 +2228,8 @@ EffectsRD::EffectsRD(bool p_prefer_raster_effects) {
 			for (int pass = 0; pass < 4; pass++) {
 				for (int subPass = 0; subPass < sub_pass_count; subPass++) {
 					int a = pass;
-					int b = subPass;
-
 					int spmap[5]{ 0, 1, 4, 3, 2 };
-					b = spmap[subPass];
+					int b = spmap[subPass];
 
 					float ca, sa;
 					float angle0 = (float(a) + float(b) / float(sub_pass_count)) * Math_PI * 0.5f;
@@ -2258,7 +2314,7 @@ EffectsRD::EffectsRD(bool p_prefer_raster_effects) {
 		ERR_FAIL_COND(pipeline != SSAO_MAX);
 	}
 
-	{
+	if (!prefer_raster_effects) {
 		// Initialize roughness limiter
 		Vector<String> shader_modes;
 		shader_modes.push_back("");
@@ -2356,7 +2412,7 @@ EffectsRD::EffectsRD(bool p_prefer_raster_effects) {
 		}
 	}
 
-	{
+	if (!prefer_raster_effects) {
 		Vector<String> specular_modes;
 		specular_modes.push_back("\n#define MODE_MERGE\n");
 		specular_modes.push_back("\n#define MODE_MERGE\n#define MODE_SSR\n");
@@ -2392,72 +2448,74 @@ EffectsRD::EffectsRD(bool p_prefer_raster_effects) {
 		}
 	}
 
-	{
-		Vector<String> ssr_modes;
-		ssr_modes.push_back("\n");
-		ssr_modes.push_back("\n#define MODE_ROUGH\n");
+	if (!prefer_raster_effects) {
+		{
+			Vector<String> ssr_modes;
+			ssr_modes.push_back("\n");
+			ssr_modes.push_back("\n#define MODE_ROUGH\n");
 
-		ssr.shader.initialize(ssr_modes);
+			ssr.shader.initialize(ssr_modes);
 
-		ssr.shader_version = ssr.shader.version_create();
+			ssr.shader_version = ssr.shader.version_create();
 
-		for (int i = 0; i < SCREEN_SPACE_REFLECTION_MAX; i++) {
-			ssr.pipelines[i] = RD::get_singleton()->compute_pipeline_create(ssr.shader.version_get_shader(ssr.shader_version, i));
+			for (int i = 0; i < SCREEN_SPACE_REFLECTION_MAX; i++) {
+				ssr.pipelines[i] = RD::get_singleton()->compute_pipeline_create(ssr.shader.version_get_shader(ssr.shader_version, i));
+			}
 		}
-	}
 
-	{
-		Vector<String> ssr_filter_modes;
-		ssr_filter_modes.push_back("\n");
-		ssr_filter_modes.push_back("\n#define VERTICAL_PASS\n");
+		{
+			Vector<String> ssr_filter_modes;
+			ssr_filter_modes.push_back("\n");
+			ssr_filter_modes.push_back("\n#define VERTICAL_PASS\n");
 
-		ssr_filter.shader.initialize(ssr_filter_modes);
+			ssr_filter.shader.initialize(ssr_filter_modes);
 
-		ssr_filter.shader_version = ssr_filter.shader.version_create();
+			ssr_filter.shader_version = ssr_filter.shader.version_create();
 
-		for (int i = 0; i < SCREEN_SPACE_REFLECTION_FILTER_MAX; i++) {
-			ssr_filter.pipelines[i] = RD::get_singleton()->compute_pipeline_create(ssr_filter.shader.version_get_shader(ssr_filter.shader_version, i));
+			for (int i = 0; i < SCREEN_SPACE_REFLECTION_FILTER_MAX; i++) {
+				ssr_filter.pipelines[i] = RD::get_singleton()->compute_pipeline_create(ssr_filter.shader.version_get_shader(ssr_filter.shader_version, i));
+			}
 		}
-	}
 
-	{
-		Vector<String> ssr_scale_modes;
-		ssr_scale_modes.push_back("\n");
+		{
+			Vector<String> ssr_scale_modes;
+			ssr_scale_modes.push_back("\n");
 
-		ssr_scale.shader.initialize(ssr_scale_modes);
+			ssr_scale.shader.initialize(ssr_scale_modes);
 
-		ssr_scale.shader_version = ssr_scale.shader.version_create();
+			ssr_scale.shader_version = ssr_scale.shader.version_create();
 
-		ssr_scale.pipeline = RD::get_singleton()->compute_pipeline_create(ssr_scale.shader.version_get_shader(ssr_scale.shader_version, 0));
-	}
-
-	{
-		Vector<String> sss_modes;
-		sss_modes.push_back("\n#define USE_11_SAMPLES\n");
-		sss_modes.push_back("\n#define USE_17_SAMPLES\n");
-		sss_modes.push_back("\n#define USE_25_SAMPLES\n");
-
-		sss.shader.initialize(sss_modes);
-
-		sss.shader_version = sss.shader.version_create();
-
-		for (int i = 0; i < sss_modes.size(); i++) {
-			sss.pipelines[i] = RD::get_singleton()->compute_pipeline_create(sss.shader.version_get_shader(sss.shader_version, i));
+			ssr_scale.pipeline = RD::get_singleton()->compute_pipeline_create(ssr_scale.shader.version_get_shader(ssr_scale.shader_version, 0));
 		}
-	}
 
-	{
-		Vector<String> resolve_modes;
-		resolve_modes.push_back("\n#define MODE_RESOLVE_GI\n");
-		resolve_modes.push_back("\n#define MODE_RESOLVE_GI\n#define VOXEL_GI_RESOLVE\n");
-		resolve_modes.push_back("\n#define MODE_RESOLVE_DEPTH\n");
+		{
+			Vector<String> sss_modes;
+			sss_modes.push_back("\n#define USE_11_SAMPLES\n");
+			sss_modes.push_back("\n#define USE_17_SAMPLES\n");
+			sss_modes.push_back("\n#define USE_25_SAMPLES\n");
 
-		resolve.shader.initialize(resolve_modes);
+			sss.shader.initialize(sss_modes);
 
-		resolve.shader_version = resolve.shader.version_create();
+			sss.shader_version = sss.shader.version_create();
 
-		for (int i = 0; i < RESOLVE_MODE_MAX; i++) {
-			resolve.pipelines[i] = RD::get_singleton()->compute_pipeline_create(resolve.shader.version_get_shader(resolve.shader_version, i));
+			for (int i = 0; i < sss_modes.size(); i++) {
+				sss.pipelines[i] = RD::get_singleton()->compute_pipeline_create(sss.shader.version_get_shader(sss.shader_version, i));
+			}
+		}
+
+		{
+			Vector<String> resolve_modes;
+			resolve_modes.push_back("\n#define MODE_RESOLVE_GI\n");
+			resolve_modes.push_back("\n#define MODE_RESOLVE_GI\n#define VOXEL_GI_RESOLVE\n");
+			resolve_modes.push_back("\n#define MODE_RESOLVE_DEPTH\n");
+
+			resolve.shader.initialize(resolve_modes);
+
+			resolve.shader_version = resolve.shader.version_create();
+
+			for (int i = 0; i < RESOLVE_MODE_MAX; i++) {
+				resolve.pipelines[i] = RD::get_singleton()->compute_pipeline_create(resolve.shader.version_get_shader(resolve.shader_version, i));
+			}
 		}
 	}
 
@@ -2523,10 +2581,7 @@ EffectsRD::~EffectsRD() {
 	RD::get_singleton()->free(index_buffer); //array gets freed as dependency
 	RD::get_singleton()->free(filter.coefficient_buffer);
 
-	RD::get_singleton()->free(ssao.mirror_sampler);
-	RD::get_singleton()->free(ssao.gather_constants_buffer);
-	RD::get_singleton()->free(ssao.importance_map_load_counter);
-
+	FSR_upscale.shader.version_free(FSR_upscale.shader_version);
 	if (prefer_raster_effects) {
 		blur_raster.shader.version_free(blur_raster.shader_version);
 		bokeh.raster_shader.version_free(blur_raster.shader_version);
@@ -2541,21 +2596,27 @@ EffectsRD::~EffectsRD() {
 		cubemap_downsampler.compute_shader.version_free(cubemap_downsampler.shader_version);
 		filter.compute_shader.version_free(filter.shader_version);
 	}
-	copy.shader.version_free(copy.shader_version);
+	if (!prefer_raster_effects) {
+		copy.shader.version_free(copy.shader_version);
+		resolve.shader.version_free(resolve.shader_version);
+		specular_merge.shader.version_free(specular_merge.shader_version);
+		ssao.blur_shader.version_free(ssao.blur_shader_version);
+		ssao.gather_shader.version_free(ssao.gather_shader_version);
+		ssao.downsample_shader.version_free(ssao.downsample_shader_version);
+		ssao.interleave_shader.version_free(ssao.interleave_shader_version);
+		ssao.importance_map_shader.version_free(ssao.importance_map_shader_version);
+		roughness_limiter.shader.version_free(roughness_limiter.shader_version);
+		ssr.shader.version_free(ssr.shader_version);
+		ssr_filter.shader.version_free(ssr_filter.shader_version);
+		ssr_scale.shader.version_free(ssr_scale.shader_version);
+		sss.shader.version_free(sss.shader_version);
+
+		RD::get_singleton()->free(ssao.mirror_sampler);
+		RD::get_singleton()->free(ssao.gather_constants_buffer);
+		RD::get_singleton()->free(ssao.importance_map_load_counter);
+	}
 	copy_to_fb.shader.version_free(copy_to_fb.shader_version);
 	cube_to_dp.shader.version_free(cube_to_dp.shader_version);
-	resolve.shader.version_free(resolve.shader_version);
-	roughness_limiter.shader.version_free(roughness_limiter.shader_version);
 	sort.shader.version_free(sort.shader_version);
-	specular_merge.shader.version_free(specular_merge.shader_version);
-	ssao.blur_shader.version_free(ssao.blur_shader_version);
-	ssao.gather_shader.version_free(ssao.gather_shader_version);
-	ssao.downsample_shader.version_free(ssao.downsample_shader_version);
-	ssao.interleave_shader.version_free(ssao.interleave_shader_version);
-	ssao.importance_map_shader.version_free(ssao.importance_map_shader_version);
-	ssr.shader.version_free(ssr.shader_version);
-	ssr_filter.shader.version_free(ssr_filter.shader_version);
-	ssr_scale.shader.version_free(ssr_scale.shader_version);
-	sss.shader.version_free(sss.shader_version);
 	tonemap.shader.version_free(tonemap.shader_version);
 }

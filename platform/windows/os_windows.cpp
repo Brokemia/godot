@@ -28,15 +28,13 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
 /*************************************************************************/
 
-// Must include Winsock before windows.h (included by os_windows.h)
-#include "drivers/unix/net_socket_posix.h"
-
 #include "os_windows.h"
 
 #include "core/debugger/engine_debugger.h"
 #include "core/debugger/script_debugger.h"
 #include "core/io/marshalls.h"
 #include "core/version_generated.gen.h"
+#include "drivers/unix/net_socket_posix.h"
 #include "drivers/windows/dir_access_windows.h"
 #include "drivers/windows/file_access_windows.h"
 #include "joypad_windows.h"
@@ -75,7 +73,6 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 #define GetProcAddress (void *)GetProcAddress
 #endif
 
-#ifdef DEBUG_ENABLED
 static String format_error_message(DWORD id) {
 	LPWSTR messageBuffer = nullptr;
 	size_t size = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
@@ -87,7 +84,6 @@ static String format_error_message(DWORD id) {
 
 	return msg;
 }
-#endif // DEBUG_ENABLED
 
 void RedirectIOToConsole() {
 	int hConHandle;
@@ -294,12 +290,13 @@ String OS_Windows::get_name() const {
 	return "Windows";
 }
 
-OS::Date OS_Windows::get_date(bool utc) const {
+OS::Date OS_Windows::get_date(bool p_utc) const {
 	SYSTEMTIME systemtime;
-	if (utc)
+	if (p_utc) {
 		GetSystemTime(&systemtime);
-	else
+	} else {
 		GetLocalTime(&systemtime);
+	}
 
 	Date date;
 	date.day = systemtime.wDay;
@@ -310,12 +307,13 @@ OS::Date OS_Windows::get_date(bool utc) const {
 	return date;
 }
 
-OS::Time OS_Windows::get_time(bool utc) const {
+OS::Time OS_Windows::get_time(bool p_utc) const {
 	SYSTEMTIME systemtime;
-	if (utc)
+	if (p_utc) {
 		GetSystemTime(&systemtime);
-	else
+	} else {
 		GetLocalTime(&systemtime);
+	}
 
 	Time time;
 	time.hour = systemtime.wHour;
@@ -449,7 +447,12 @@ Error OS_Windows::execute(const String &p_path, const List<String> &p_arguments,
 	ZeroMemory(&pi.pi, sizeof(pi.pi));
 	LPSTARTUPINFOW si_w = (LPSTARTUPINFOW)&pi.si;
 
-	int ret = CreateProcessW(nullptr, (LPWSTR)(command.utf16().ptrw()), nullptr, nullptr, false, NORMAL_PRIORITY_CLASS & CREATE_NO_WINDOW, nullptr, nullptr, si_w, &pi.pi);
+	DWORD dwCreationFlags = NORMAL_PRIORITY_CLASS;
+#ifndef DEBUG_ENABLED
+	dwCreationFlags |= CREATE_NO_WINDOW;
+#endif
+
+	int ret = CreateProcessW(nullptr, (LPWSTR)(command.utf16().ptrw()), nullptr, nullptr, false, dwCreationFlags, nullptr, nullptr, si_w, &pi.pi);
 	ERR_FAIL_COND_V_MSG(ret == 0, ERR_CANT_FORK, "Could not create child process: " + command);
 
 	WaitForSingleObject(pi.pi.hProcess, INFINITE);
@@ -464,6 +467,16 @@ Error OS_Windows::execute(const String &p_path, const List<String> &p_arguments,
 	return OK;
 };
 
+bool OS_Windows::_is_win11_terminal() const {
+	HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+	DWORD dwMode = 0;
+	if (GetConsoleMode(hStdOut, &dwMode)) {
+		return ((dwMode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) == ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+	} else {
+		return false;
+	}
+}
+
 Error OS_Windows::create_process(const String &p_path, const List<String> &p_arguments, ProcessID *r_child_id) {
 	String path = p_path.replace("/", "\\");
 	String command = _quote_command_line_argument(path);
@@ -477,7 +490,16 @@ Error OS_Windows::create_process(const String &p_path, const List<String> &p_arg
 	ZeroMemory(&pi.pi, sizeof(pi.pi));
 	LPSTARTUPINFOW si_w = (LPSTARTUPINFOW)&pi.si;
 
-	int ret = CreateProcessW(nullptr, (LPWSTR)(command.utf16().ptrw()), nullptr, nullptr, false, NORMAL_PRIORITY_CLASS & CREATE_NO_WINDOW, nullptr, nullptr, si_w, &pi.pi);
+	DWORD dwCreationFlags = NORMAL_PRIORITY_CLASS;
+#ifndef DEBUG_ENABLED
+	dwCreationFlags |= CREATE_NO_WINDOW;
+#endif
+	if (p_path == get_executable_path() && GetConsoleWindow() != nullptr && _is_win11_terminal()) {
+		// Open a new terminal as a workaround for Windows Terminal bug.
+		dwCreationFlags |= CREATE_NEW_CONSOLE;
+	}
+
+	int ret = CreateProcessW(nullptr, (LPWSTR)(command.utf16().ptrw()), nullptr, nullptr, false, dwCreationFlags, nullptr, nullptr, si_w, &pi.pi);
 	ERR_FAIL_COND_V_MSG(ret == 0, ERR_CANT_FORK, "Could not create child process: " + command);
 
 	ProcessID pid = pi.pi.dwProcessId;
@@ -557,8 +579,27 @@ String OS_Windows::get_stdin_string(bool p_block) {
 }
 
 Error OS_Windows::shell_open(String p_uri) {
-	ShellExecuteW(nullptr, nullptr, (LPCWSTR)(p_uri.utf16().get_data()), nullptr, nullptr, SW_SHOWNORMAL);
-	return OK;
+	INT_PTR ret = (INT_PTR)ShellExecuteW(nullptr, nullptr, (LPCWSTR)(p_uri.utf16().get_data()), nullptr, nullptr, SW_SHOWNORMAL);
+	if (ret > 32) {
+		return OK;
+	} else {
+		switch (ret) {
+			case ERROR_FILE_NOT_FOUND:
+			case SE_ERR_DLLNOTFOUND:
+				return ERR_FILE_NOT_FOUND;
+			case ERROR_PATH_NOT_FOUND:
+				return ERR_FILE_BAD_PATH;
+			case ERROR_BAD_FORMAT:
+				return ERR_FILE_CORRUPT;
+			case SE_ERR_ACCESSDENIED:
+				return ERR_UNAUTHORIZED;
+			case 0:
+			case SE_ERR_OOM:
+				return ERR_OUT_OF_MEMORY;
+			default:
+				return FAILED;
+		}
+	}
 }
 
 String OS_Windows::get_locale() const {
@@ -579,7 +620,7 @@ String OS_Windows::get_locale() const {
 		wl++;
 	}
 
-	if (neutral != "")
+	if (!neutral.is_empty())
 		return String(neutral).replace("-", "_");
 
 	return "en";
@@ -662,18 +703,27 @@ String OS_Windows::get_data_path() const {
 }
 
 String OS_Windows::get_cache_path() const {
-	// The XDG Base Directory specification technically only applies on Linux/*BSD, but it doesn't hurt to support it on Windows as well.
-	if (has_environment("XDG_CACHE_HOME")) {
-		if (get_environment("XDG_CACHE_HOME").is_absolute_path()) {
-			return get_environment("XDG_CACHE_HOME").replace("\\", "/");
-		} else {
-			WARN_PRINT_ONCE("`XDG_CACHE_HOME` is a relative path. Ignoring its value and falling back to `%TEMP%` or `get_config_path()` per the XDG Base Directory specification.");
+	static String cache_path_cache;
+	if (cache_path_cache.is_empty()) {
+		// The XDG Base Directory specification technically only applies on Linux/*BSD, but it doesn't hurt to support it on Windows as well.
+		if (has_environment("XDG_CACHE_HOME")) {
+			if (get_environment("XDG_CACHE_HOME").is_absolute_path()) {
+				cache_path_cache = get_environment("XDG_CACHE_HOME").replace("\\", "/");
+			} else {
+				WARN_PRINT_ONCE("`XDG_CACHE_HOME` is a relative path. Ignoring its value and falling back to `%LOCALAPPDATA%\\cache`, `%TEMP%` or `get_config_path()` per the XDG Base Directory specification.");
+			}
+		}
+		if (cache_path_cache.is_empty() && has_environment("LOCALAPPDATA")) {
+			cache_path_cache = get_environment("LOCALAPPDATA").replace("\\", "/");
+		}
+		if (cache_path_cache.is_empty() && has_environment("TEMP")) {
+			cache_path_cache = get_environment("TEMP").replace("\\", "/");
+		}
+		if (cache_path_cache.is_empty()) {
+			cache_path_cache = get_config_path();
 		}
 	}
-	if (has_environment("TEMP")) {
-		return get_environment("TEMP").replace("\\", "/");
-	}
-	return get_config_path();
+	return cache_path_cache;
 }
 
 // Get properly capitalized engine name for system paths
@@ -681,7 +731,7 @@ String OS_Windows::get_godot_dir_name() const {
 	return String(VERSION_SHORT_NAME).capitalize();
 }
 
-String OS_Windows::get_system_dir(SystemDir p_dir) const {
+String OS_Windows::get_system_dir(SystemDir p_dir, bool p_shared_storage) const {
 	KNOWNFOLDERID id;
 
 	switch (p_dir) {
@@ -721,11 +771,11 @@ String OS_Windows::get_system_dir(SystemDir p_dir) const {
 
 String OS_Windows::get_user_data_dir() const {
 	String appname = get_safe_dir_name(ProjectSettings::get_singleton()->get("application/config/name"));
-	if (appname != "") {
+	if (!appname.is_empty()) {
 		bool use_custom_dir = ProjectSettings::get_singleton()->get("application/config/use_custom_user_dir");
 		if (use_custom_dir) {
 			String custom_dir = get_safe_dir_name(ProjectSettings::get_singleton()->get("application/config/custom_user_dir_name"), true);
-			if (custom_dir == "") {
+			if (custom_dir.is_empty()) {
 				custom_dir = appname;
 			}
 			return get_data_path().plus_file(custom_dir).replace("\\", "/");
@@ -734,7 +784,7 @@ String OS_Windows::get_user_data_dir() const {
 		}
 	}
 
-	return ProjectSettings::get_singleton()->get_resource_path();
+	return get_data_path().plus_file(get_godot_dir_name()).plus_file("app_userdata").plus_file("[unnamed project]");
 }
 
 String OS_Windows::get_unique_id() const {

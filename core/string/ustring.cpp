@@ -38,13 +38,11 @@
 #include "core/string/translation.h"
 #include "core/string/ucaps.h"
 #include "core/variant/variant.h"
+#include "core/version_generated.gen.h"
 
-#include <cstdint>
-
-#ifndef NO_USE_STDLIB
 #include <stdio.h>
 #include <stdlib.h>
-#endif
+#include <cstdint>
 
 #ifdef _MSC_VER
 #define _CRT_SECURE_NO_WARNINGS // to disable build-time warning which suggested to use strcpy_s instead strcpy
@@ -132,9 +130,8 @@ Char16String &Char16String::operator+=(char16_t p_char) {
 	return *this;
 }
 
-Char16String &Char16String::operator=(const char16_t *p_cstr) {
+void Char16String::operator=(const char16_t *p_cstr) {
 	copy_from(p_cstr);
-	return *this;
 }
 
 const char16_t *Char16String::get_data() const {
@@ -188,9 +185,8 @@ CharString &CharString::operator+=(char p_char) {
 	return *this;
 }
 
-CharString &CharString::operator=(const char *p_cstr) {
+void CharString::operator=(const char *p_cstr) {
 	copy_from(p_cstr);
-	return *this;
 }
 
 const char *CharString::get_data() const {
@@ -955,10 +951,6 @@ const char32_t *String::get_data() const {
 	return size() ? &operator[](0) : &zero;
 }
 
-void String::erase(int p_pos, int p_chars) {
-	*this = left(MAX(p_pos, 0)) + substr(p_pos + p_chars, length() - ((p_pos + p_chars)));
-}
-
 String String::capitalize() const {
 	String aux = this->camelcase_to_underscore(true).replace("_", " ").strip_edges();
 	String cap;
@@ -1393,10 +1385,15 @@ String String::num(double p_num, int p_decimals) {
 			return "inf";
 		}
 	}
-#ifndef NO_USE_STDLIB
 
 	if (p_decimals < 0) {
-		p_decimals = 14 - (int)floor(log10(p_num));
+		p_decimals = 14;
+		const double abs_num = ABS(p_num);
+		if (abs_num > 10) {
+			// We want to align the digits to the above sane default, so we only
+			// need to subtract log10 for numbers with a positive power of ten.
+			p_decimals -= (int)floor(log10(abs_num));
+		}
 	}
 	if (p_decimals > MAX_DECIMALS) {
 		p_decimals = MAX_DECIMALS;
@@ -1460,87 +1457,6 @@ String String::num(double p_num, int p_decimals) {
 	}
 
 	return buf;
-#else
-
-	String s;
-	String sd;
-	/* integer part */
-
-	bool neg = p_num < 0;
-	p_num = ABS(p_num);
-	int intn = (int)p_num;
-
-	/* decimal part */
-
-	if (p_decimals > 0 || (p_decimals == -1 && (int)p_num != p_num)) {
-		double dec = p_num - (double)((int)p_num);
-
-		int digit = 0;
-		if (p_decimals > MAX_DECIMALS) {
-			p_decimals = MAX_DECIMALS;
-		}
-
-		int dec_int = 0;
-		int dec_max = 0;
-
-		while (true) {
-			dec *= 10.0;
-			dec_int = dec_int * 10 + (int)dec % 10;
-			dec_max = dec_max * 10 + 9;
-			digit++;
-
-			if (p_decimals == -1) {
-				if (digit == MAX_DECIMALS) { //no point in going to infinite
-					break;
-				}
-
-				if (dec - (double)((int)dec) < 1e-6) {
-					break;
-				}
-			}
-
-			if (digit == p_decimals) {
-				break;
-			}
-		}
-		dec *= 10;
-		int last = (int)dec % 10;
-
-		if (last > 5) {
-			if (dec_int == dec_max) {
-				dec_int = 0;
-				intn++;
-			} else {
-				dec_int++;
-			}
-		}
-
-		String decimal;
-		for (int i = 0; i < digit; i++) {
-			char num[2] = { 0, 0 };
-			num[0] = '0' + dec_int % 10;
-			decimal = num + decimal;
-			dec_int /= 10;
-		}
-		sd = '.' + decimal;
-	}
-
-	if (intn == 0)
-
-		s = "0";
-	else {
-		while (intn) {
-			char32_t num = '0' + (intn % 10);
-			intn /= 10;
-			s = num + s;
-		}
-	}
-
-	s = s + sd;
-	if (neg)
-		s = "-" + s;
-	return s;
-#endif
 }
 
 String String::num_int64(int64_t p_num, int base, bool capitalize_hex) {
@@ -1625,38 +1541,52 @@ String String::num_real(double p_num, bool p_trailing) {
 
 	String s;
 	String sd;
-	/* integer part */
+
+	// Integer part.
 
 	bool neg = p_num < 0;
 	p_num = ABS(p_num);
-	int intn = (int)p_num;
+	int64_t intn = (int64_t)p_num;
 
-	/* decimal part */
+	// Decimal part.
 
-	if ((int)p_num != p_num) {
-		double dec = p_num - (double)((int)p_num);
+	if (intn != p_num) {
+		double dec = p_num - (double)intn;
 
 		int digit = 0;
 
-#if REAL_T_IS_DOUBLE
-		int decimals = 14 - (int)floor(log10(p_num));
+#ifdef REAL_T_IS_DOUBLE
+		int decimals = 14;
+		double tolerance = 1e-14;
 #else
-		int decimals = 6 - (int)floor(log10(p_num));
+		int decimals = 6;
+		double tolerance = 1e-6;
 #endif
+		// We want to align the digits to the above sane default, so we only
+		// need to subtract log10 for numbers with a positive power of ten.
+		if (p_num > 10) {
+			decimals -= (int)floor(log10(p_num));
+		}
+
 		if (decimals > MAX_DECIMALS) {
 			decimals = MAX_DECIMALS;
 		}
 
-		int dec_int = 0;
-		int dec_max = 0;
+		// In case the value ends up ending in "99999", we want to add a
+		// tiny bit to the value we're checking when deciding when to stop,
+		// so we multiply by slightly above 1 (1 + 1e-7 or 1e-15).
+		double check_multiplier = 1 + tolerance / 10;
+
+		int64_t dec_int = 0;
+		int64_t dec_max = 0;
 
 		while (true) {
 			dec *= 10.0;
-			dec_int = dec_int * 10 + (int)dec % 10;
+			dec_int = dec_int * 10 + (int64_t)dec % 10;
 			dec_max = dec_max * 10 + 9;
 			digit++;
 
-			if ((dec - (double)((int)dec)) < 1e-6) {
+			if ((dec - (double)(int64_t)(dec * check_multiplier)) < tolerance) {
 				break;
 			}
 
@@ -1666,7 +1596,7 @@ String String::num_real(double p_num, bool p_trailing) {
 		}
 
 		dec *= 10;
-		int last = (int)dec % 10;
+		int last = (int64_t)dec % 10;
 
 		if (last > 5) {
 			if (dec_int == dec_max) {
@@ -1720,19 +1650,18 @@ String String::num_scientific(double p_num) {
 			return "inf";
 		}
 	}
-#ifndef NO_USE_STDLIB
 
 	char buf[256];
 
 #if defined(__GNUC__) || defined(_MSC_VER)
 
-#if (defined(__MINGW32__) || (defined(_MSC_VER) && _MSC_VER < 1900)) && defined(_TWO_DIGIT_EXPONENT) && !defined(_UCRT)
-	// MinGW and old MSC require _set_output_format() to conform to C99 output for printf
+#if defined(__MINGW32__) && defined(_TWO_DIGIT_EXPONENT) && !defined(_UCRT)
+	// MinGW requires _set_output_format() to conform to C99 output for printf
 	unsigned int old_exponent_format = _set_output_format(_TWO_DIGIT_EXPONENT);
 #endif
 	snprintf(buf, 256, "%lg", p_num);
 
-#if (defined(__MINGW32__) || (defined(_MSC_VER) && _MSC_VER < 1900)) && defined(_TWO_DIGIT_EXPONENT) && !defined(_UCRT)
+#if defined(__MINGW32__) && defined(_TWO_DIGIT_EXPONENT) && !defined(_UCRT)
 	_set_output_format(old_exponent_format);
 #endif
 
@@ -1743,10 +1672,6 @@ String String::num_scientific(double p_num) {
 	buf[255] = 0;
 
 	return buf;
-#else
-
-	return String::num(p_num);
-#endif
 }
 
 String String::md5(const uint8_t *p_md5) {
@@ -2207,7 +2132,7 @@ int64_t String::hex_to_int() const {
 		s++;
 	}
 
-	if (len > 2 && s[0] == '0' && s[1] == 'x') {
+	if (len > 2 && s[0] == '0' && lower_case(s[1]) == 'x') {
 		s += 2;
 	}
 
@@ -2221,7 +2146,7 @@ int64_t String::hex_to_int() const {
 		} else if (c >= 'a' && c <= 'f') {
 			n = (c - 'a') + 10;
 		} else {
-			return 0;
+			ERR_FAIL_COND_V_MSG(true, 0, "Invalid hexadecimal notation character \"" + chr(*s) + "\" in string \"" + *this + "\".");
 		}
 		// Check for overflow/underflow, with special case to ensure INT64_MIN does not result in error
 		bool overflow = ((hex > INT64_MAX / 16) && (sign == 1 || (sign == -1 && hex != (INT64_MAX >> 4) + 1))) || (sign == -1 && hex == (INT64_MAX >> 4) + 1 && c > '0');
@@ -2248,7 +2173,7 @@ int64_t String::bin_to_int() const {
 		s++;
 	}
 
-	if (len > 2 && s[0] == '0' && s[1] == 'b') {
+	if (len > 2 && s[0] == '0' && lower_case(s[1]) == 'b') {
 		s += 2;
 	}
 
@@ -2387,28 +2312,33 @@ bool String::is_numeric() const {
 }
 
 template <class C>
-static double built_in_strtod(const C *string, /* A decimal ASCII floating-point number,
-				 * optionally preceded by white space. Must
-				 * have form "-I.FE-X", where I is the integer
-				 * part of the mantissa, F is the fractional
-				 * part of the mantissa, and X is the
-				 * exponent. Either of the signs may be "+",
-				 * "-", or omitted. Either I or F may be
-				 * omitted, or both. The decimal point isn't
-				 * necessary unless F is present. The "E" may
-				 * actually be an "e". E and X may both be
-				 * omitted (but not just one). */
-		C **endPtr = nullptr) /* If non-nullptr, store terminating Cacter's
-				 * address here. */
-{
-	static const int maxExponent = 511; /* Largest possible base 10 exponent.  Any
-					 * exponent larger than this will already
-					 * produce underflow or overflow, so there's
-					 * no need to worry about additional digits.
-					 */
-	static const double powersOf10[] = { /* Table giving binary powers of 10.  Entry */
-		10., /* is 10^2^i.  Used to convert decimal */
-		100., /* exponents into floating-point numbers. */
+static double built_in_strtod(
+		/* A decimal ASCII floating-point number,
+		 * optionally preceded by white space. Must
+		 * have form "-I.FE-X", where I is the integer
+		 * part of the mantissa, F is the fractional
+		 * part of the mantissa, and X is the
+		 * exponent. Either of the signs may be "+",
+		 * "-", or omitted. Either I or F may be
+		 * omitted, or both. The decimal point isn't
+		 * necessary unless F is present. The "E" may
+		 * actually be an "e". E and X may both be
+		 * omitted (but not just one). */
+		const C *string,
+		/* If non-nullptr, store terminating Cacter's
+		 * address here. */
+		C **endPtr = nullptr) {
+	/* Largest possible base 10 exponent. Any
+	 * exponent larger than this will already
+	 * produce underflow or overflow, so there's
+	 * no need to worry about additional digits. */
+	static const int maxExponent = 511;
+	/* Table giving binary powers of 10. Entry
+	 * is 10^2^i. Used to convert decimal
+	 * exponents into floating-point numbers. */
+	static const double powersOf10[] = {
+		10.,
+		100.,
 		1.0e4,
 		1.0e8,
 		1.0e16,
@@ -2423,25 +2353,28 @@ static double built_in_strtod(const C *string, /* A decimal ASCII floating-point
 	const double *d;
 	const C *p;
 	int c;
-	int exp = 0; /* Exponent read from "EX" field. */
-	int fracExp = 0; /* Exponent that derives from the fractional
-				 * part. Under normal circumstances, it is
-				 * the negative of the number of digits in F.
-				 * However, if I is very long, the last digits
-				 * of I get dropped (otherwise a long I with a
-				 * large negative exponent could cause an
-				 * unnecessary overflow on I alone). In this
-				 * case, fracExp is incremented one for each
-				 * dropped digit. */
-	int mantSize; /* Number of digits in mantissa. */
-	int decPt; /* Number of mantissa digits BEFORE decimal
-				 * point. */
-	const C *pExp; /* Temporarily holds location of exponent in
-				 * string. */
+	/* Exponent read from "EX" field. */
+	int exp = 0;
+	/* Exponent that derives from the fractional
+	 * part. Under normal circumstances, it is
+	 * the negative of the number of digits in F.
+	 * However, if I is very long, the last digits
+	 * of I get dropped (otherwise a long I with a
+	 * large negative exponent could cause an
+	 * unnecessary overflow on I alone). In this
+	 * case, fracExp is incremented one for each
+	 * dropped digit. */
+	int fracExp = 0;
+	/* Number of digits in mantissa. */
+	int mantSize;
+	/* Number of mantissa digits BEFORE decimal point. */
+	int decPt;
+	/* Temporarily holds location of exponent in string. */
+	const C *pExp;
 
 	/*
-     * Strip off leading blanks and check for a sign.
-     */
+	 * Strip off leading blanks and check for a sign.
+	 */
 
 	p = string;
 	while (*p == ' ' || *p == '\t' || *p == '\n') {
@@ -2458,9 +2391,9 @@ static double built_in_strtod(const C *string, /* A decimal ASCII floating-point
 	}
 
 	/*
-     * Count the number of digits in the mantissa (including the decimal
-     * point), and also locate the decimal point.
-     */
+	 * Count the number of digits in the mantissa (including the decimal
+	 * point), and also locate the decimal point.
+	 */
 
 	decPt = -1;
 	for (mantSize = 0;; mantSize += 1) {
@@ -2475,11 +2408,11 @@ static double built_in_strtod(const C *string, /* A decimal ASCII floating-point
 	}
 
 	/*
-     * Now suck up the digits in the mantissa. Use two integers to collect 9
-     * digits each (this is faster than using floating-point). If the mantissa
-     * has more than 18 digits, ignore the extras, since they can't affect the
-     * value anyway.
-     */
+	 * Now suck up the digits in the mantissa. Use two integers to collect 9
+	 * digits each (this is faster than using floating-point). If the mantissa
+	 * has more than 18 digits, ignore the extras, since they can't affect the
+	 * value anyway.
+	 */
 
 	pExp = p;
 	p -= mantSize;
@@ -2525,8 +2458,8 @@ static double built_in_strtod(const C *string, /* A decimal ASCII floating-point
 	}
 
 	/*
-     * Skim off the exponent.
-     */
+	 * Skim off the exponent.
+	 */
 
 	p = pExp;
 	if ((*p == 'E') || (*p == 'e')) {
@@ -2556,10 +2489,10 @@ static double built_in_strtod(const C *string, /* A decimal ASCII floating-point
 	}
 
 	/*
-     * Generate a floating-point number that represents the exponent. Do this
-     * by processing the exponent one bit at a time to combine many powers of
-     * 2 of 10. Then combine the exponent with the fraction.
-     */
+	 * Generate a floating-point number that represents the exponent. Do this
+	 * by processing the exponent one bit at a time to combine many powers of
+	 * 2 of 10. Then combine the exponent with the fraction.
+	 */
 
 	if (exp < 0) {
 		expSign = true;
@@ -3574,6 +3507,27 @@ char32_t String::unicode_at(int p_idx) const {
 	return operator[](p_idx);
 }
 
+String String::indent(const String &p_prefix) const {
+	String new_string;
+	int line_start = 0;
+
+	for (int i = 0; i < length(); i++) {
+		const char32_t c = operator[](i);
+		if (c == '\n') {
+			if (i == line_start) {
+				new_string += c; // Leave empty lines empty.
+			} else {
+				new_string += p_prefix + substr(line_start, i - line_start + 1);
+			}
+			line_start = i + 1;
+		}
+	}
+	if (line_start != length()) {
+		new_string += p_prefix + substr(line_start);
+	}
+	return new_string;
+}
+
 String String::dedent() const {
 	String new_string;
 	String indent;
@@ -3632,7 +3586,7 @@ String String::strip_edges(bool left, bool right) const {
 	}
 
 	if (right) {
-		for (int i = (int)(len - 1); i >= 0; i--) {
+		for (int i = len - 1; i >= 0; i--) {
 			if (operator[](i) <= 32) {
 				end--;
 			} else {
@@ -3735,15 +3689,15 @@ String String::simplify_path() const {
 	for (int i = 0; i < dirs.size(); i++) {
 		String d = dirs[i];
 		if (d == ".") {
-			dirs.remove(i);
+			dirs.remove_at(i);
 			i--;
 		} else if (d == "..") {
 			if (i == 0) {
-				dirs.remove(i);
+				dirs.remove_at(i);
 				i--;
 			} else {
-				dirs.remove(i);
-				dirs.remove(i - 1);
+				dirs.remove_at(i);
+				dirs.remove_at(i - 1);
 				i -= 2;
 			}
 		}
@@ -4350,7 +4304,7 @@ bool String::is_valid_filename() const {
 		return false;
 	}
 
-	if (stripped == String()) {
+	if (stripped.is_empty()) {
 		return false;
 	}
 
@@ -4401,28 +4355,44 @@ bool String::is_resource_file() const {
 	return begins_with("res://") && find("::") == -1;
 }
 
-bool String::is_rel_path() const {
+bool String::is_relative_path() const {
 	return !is_absolute_path();
 }
 
 String String::get_base_dir() const {
-	int basepos = find(":/");
-	if (basepos == -1) {
-		basepos = find(":\\");
+	int end = 0;
+
+	// url scheme style base
+	int basepos = find("://");
+	if (basepos != -1) {
+		end = basepos + 3;
 	}
+
+	// windows top level directory base
+	if (end == 0) {
+		basepos = find(":/");
+		if (basepos == -1) {
+			basepos = find(":\\");
+		}
+		if (basepos != -1) {
+			end = basepos + 2;
+		}
+	}
+
+	// unix root directory base
+	if (end == 0) {
+		if (begins_with("/")) {
+			end = 1;
+		}
+	}
+
 	String rs;
 	String base;
-	if (basepos != -1) {
-		int end = basepos + 3;
+	if (end != 0) {
 		rs = substr(end, length());
 		base = substr(0, end);
 	} else {
-		if (begins_with("/")) {
-			rs = substr(1, length());
-			base = "/";
-		} else {
-			rs = *this;
-		}
+		rs = *this;
 	}
 
 	int sep = MAX(rs.rfind("/"), rs.rfind("\\"));
@@ -4466,7 +4436,7 @@ String String::property_name_encode() const {
 	// as well as '"', '=' or ' ' (32)
 	const char32_t *cstr = get_data();
 	for (int i = 0; cstr[i]; i++) {
-		if (cstr[i] == '=' || cstr[i] == '"' || cstr[i] < 33 || cstr[i] > 126) {
+		if (cstr[i] == '=' || cstr[i] == '"' || cstr[i] == ';' || cstr[i] == '[' || cstr[i] == ']' || cstr[i] < 33 || cstr[i] > 126) {
 			return "\"" + c_escape_multiline() + "\"";
 		}
 	}
@@ -4918,15 +4888,20 @@ String TTRN(const String &p_text, const String &p_text_plural, int p_n, const St
 	return p_text_plural;
 }
 
+/* DTR and DTRN are used for the documentation, handling descriptions extracted
+ * from the XML.
+ * They also replace `$DOCS_URL` with the actual URL to the documentation's branch,
+ * to allow dehardcoding it in the XML and doing proper substitutions everywhere.
+ */
 String DTR(const String &p_text, const String &p_context) {
 	// Comes straight from the XML, so remove indentation and any trailing whitespace.
 	const String text = p_text.dedent().strip_edges();
 
 	if (TranslationServer::get_singleton()) {
-		return TranslationServer::get_singleton()->doc_translate(text, p_context);
+		return String(TranslationServer::get_singleton()->doc_translate(text, p_context)).replace("$DOCS_URL", VERSION_DOCS_URL);
 	}
 
-	return text;
+	return text.replace("$DOCS_URL", VERSION_DOCS_URL);
 }
 
 String DTRN(const String &p_text, const String &p_text_plural, int p_n, const String &p_context) {
@@ -4934,21 +4909,21 @@ String DTRN(const String &p_text, const String &p_text_plural, int p_n, const St
 	const String text_plural = p_text_plural.dedent().strip_edges();
 
 	if (TranslationServer::get_singleton()) {
-		return TranslationServer::get_singleton()->doc_translate_plural(text, text_plural, p_n, p_context);
+		return String(TranslationServer::get_singleton()->doc_translate_plural(text, text_plural, p_n, p_context)).replace("$DOCS_URL", VERSION_DOCS_URL);
 	}
 
 	// Return message based on English plural rule if translation is not possible.
 	if (p_n == 1) {
-		return text;
+		return text.replace("$DOCS_URL", VERSION_DOCS_URL);
 	}
-	return text_plural;
+	return text_plural.replace("$DOCS_URL", VERSION_DOCS_URL);
 }
 #endif
 
 String RTR(const String &p_text, const String &p_context) {
 	if (TranslationServer::get_singleton()) {
 		String rtr = TranslationServer::get_singleton()->tool_translate(p_text, p_context);
-		if (rtr == String() || rtr == p_text) {
+		if (rtr.is_empty() || rtr == p_text) {
 			return TranslationServer::get_singleton()->translate(p_text, p_context);
 		} else {
 			return rtr;
@@ -4961,7 +4936,7 @@ String RTR(const String &p_text, const String &p_context) {
 String RTRN(const String &p_text, const String &p_text_plural, int p_n, const String &p_context) {
 	if (TranslationServer::get_singleton()) {
 		String rtr = TranslationServer::get_singleton()->tool_translate_plural(p_text, p_text_plural, p_n, p_context);
-		if (rtr == String() || rtr == p_text || rtr == p_text_plural) {
+		if (rtr.is_empty() || rtr == p_text || rtr == p_text_plural) {
 			return TranslationServer::get_singleton()->translate_plural(p_text, p_text_plural, p_n, p_context);
 		} else {
 			return rtr;

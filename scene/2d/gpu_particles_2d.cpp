@@ -163,12 +163,19 @@ void GPUParticles2D::set_trail_sections(int p_sections) {
 }
 
 void GPUParticles2D::set_trail_section_subdivisions(int p_subdivisions) {
-	ERR_FAIL_COND(trail_section_subdivisions < 1);
-	ERR_FAIL_COND(trail_section_subdivisions > 1024);
+	ERR_FAIL_COND(p_subdivisions < 1);
+	ERR_FAIL_COND(p_subdivisions > 1024);
 
 	trail_section_subdivisions = p_subdivisions;
 	update();
 }
+
+#ifdef TOOLS_ENABLED
+void GPUParticles2D::set_show_visibility_rect(bool p_show_visibility_rect) {
+	show_visibility_rect = p_show_visibility_rect;
+	update();
+}
+#endif
 
 bool GPUParticles2D::is_trail_enabled() const {
 	return trail_enabled;
@@ -284,7 +291,7 @@ TypedArray<String> GPUParticles2D::get_configuration_warnings() const {
 	TypedArray<String> warnings = Node::get_configuration_warnings();
 
 	if (RenderingServer::get_singleton()->is_low_end()) {
-		warnings.push_back(TTR("GPU-based particles are not supported by the GLES2 video driver.\nUse the CPUParticles2D node instead. You can use the \"Convert to CPUParticles2D\" option for this purpose."));
+		warnings.push_back(TTR("GPU-based particles are not supported by the OpenGL video driver.\nUse the CPUParticles2D node instead. You can use the \"Convert to CPUParticles2D\" option for this purpose."));
 	}
 
 	if (process_material.is_null()) {
@@ -295,7 +302,7 @@ TypedArray<String> GPUParticles2D::get_configuration_warnings() const {
 		if (get_material().is_null() || (mat && !mat->get_particles_animation())) {
 			const ParticlesMaterial *process = Object::cast_to<ParticlesMaterial>(process_material.ptr());
 			if (process &&
-					(process->get_param(ParticlesMaterial::PARAM_ANIM_SPEED) != 0.0 || process->get_param(ParticlesMaterial::PARAM_ANIM_OFFSET) != 0.0 ||
+					(process->get_param_max(ParticlesMaterial::PARAM_ANIM_SPEED) != 0.0 || process->get_param_max(ParticlesMaterial::PARAM_ANIM_OFFSET) != 0.0 ||
 							process->get_param_texture(ParticlesMaterial::PARAM_ANIM_SPEED).is_valid() || process->get_param_texture(ParticlesMaterial::PARAM_ANIM_OFFSET).is_valid())) {
 				warnings.push_back(TTR("Particles2D animation requires the usage of a CanvasItemMaterial with \"Particles Animation\" enabled."));
 			}
@@ -452,7 +459,7 @@ void GPUParticles2D::_notification(int p_what) {
 		RS::get_singleton()->canvas_item_add_particles(get_canvas_item(), particles, texture_rid);
 
 #ifdef TOOLS_ENABLED
-		if (Engine::get_singleton()->is_editor_hint() && (this == get_tree()->get_edited_scene_root() || get_tree()->get_edited_scene_root()->is_ancestor_of(this))) {
+		if (show_visibility_rect) {
 			draw_rect(visibility_rect, Color(0, 0.7, 0.9, 0.4), false);
 		}
 #endif
@@ -532,6 +539,7 @@ void GPUParticles2D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_trail_section_subdivisions"), &GPUParticles2D::get_trail_section_subdivisions);
 
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "emitting"), "set_emitting", "is_emitting");
+	ADD_PROPERTY_DEFAULT("emitting", true); // Workaround for doctool in headless mode, as dummy rasterizer always returns false.
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "amount", PROPERTY_HINT_RANGE, "1,1000000,1,exp"), "set_amount", "get_amount");
 	ADD_GROUP("Time", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "lifetime", PROPERTY_HINT_RANGE, "0.01,600.0,0.01,or_greater"), "set_lifetime", "get_lifetime");
@@ -587,6 +595,9 @@ GPUParticles2D::GPUParticles2D() {
 	set_speed_scale(1);
 	set_fixed_fps(30);
 	set_collision_base_size(collision_base_size);
+#ifdef TOOLS_ENABLED
+	show_visibility_rect = false;
+#endif
 }
 
 GPUParticles2D::~GPUParticles2D() {

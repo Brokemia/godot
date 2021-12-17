@@ -149,15 +149,6 @@ void SkeletonModification2DFABRIK::_execute(float p_delta) {
 			return;
 		}
 		fabrik_transform_chain.write[i] = joint_bone2d_node->get_global_transform();
-
-		// Apply magnet positions
-		if (i == 0) {
-			continue; // The origin cannot use a magnet position!
-		} else {
-			Transform2D joint_trans = fabrik_transform_chain[i];
-			joint_trans.set_origin(joint_trans.get_origin() + fabrik_data_chain[i].magnet_position);
-			fabrik_transform_chain.write[i] = joint_trans;
-		}
 	}
 
 	Bone2D *final_bone2d_node = Object::cast_to<Bone2D>(ObjectDB::get_instance(fabrik_data_chain[fabrik_data_chain.size() - 1].bone2d_node_cache));
@@ -223,6 +214,11 @@ void SkeletonModification2DFABRIK::chain_backwards() {
 	Bone2D *final_bone2d_node = Object::cast_to<Bone2D>(ObjectDB::get_instance(fabrik_data_chain[final_joint_index].bone2d_node_cache));
 	Transform2D final_bone2d_trans = fabrik_transform_chain[final_joint_index];
 
+	// Apply magnet position
+	if (final_joint_index != 0) {
+		final_bone2d_trans.set_origin(final_bone2d_trans.get_origin() + fabrik_data_chain[final_joint_index].magnet_position);
+	}
+
 	// Set the rotation of the tip bone
 	final_bone2d_trans = final_bone2d_trans.looking_at(target_global_pose.get_origin());
 
@@ -245,8 +241,13 @@ void SkeletonModification2DFABRIK::chain_backwards() {
 		Bone2D *current_bone2d_node = Object::cast_to<Bone2D>(ObjectDB::get_instance(fabrik_data_chain[i].bone2d_node_cache));
 		Transform2D current_pose = fabrik_transform_chain[i];
 
+		// Apply magnet position
+		if (i != 0) {
+			current_pose.set_origin(current_pose.get_origin() + fabrik_data_chain[i].magnet_position);
+		}
+
 		float current_bone2d_node_length = current_bone2d_node->get_length() * MIN(current_bone2d_node->get_global_scale().x, current_bone2d_node->get_global_scale().y);
-		float length = current_bone2d_node_length / (previous_pose.get_origin() - current_pose.get_origin()).length();
+		float length = current_bone2d_node_length / (current_pose.get_origin().distance_to(previous_pose.get_origin()));
 		Vector2 finish_position = previous_pose.get_origin().lerp(current_pose.get_origin(), length);
 		current_pose.set_origin(finish_position);
 
@@ -267,7 +268,7 @@ void SkeletonModification2DFABRIK::chain_forwards() {
 		Transform2D next_pose = fabrik_transform_chain[i + 1];
 
 		float current_bone2d_node_length = current_bone2d_node->get_length() * MIN(current_bone2d_node->get_global_scale().x, current_bone2d_node->get_global_scale().y);
-		float length = current_bone2d_node_length / (current_pose.get_origin() - next_pose.get_origin()).length();
+		float length = current_bone2d_node_length / (next_pose.get_origin().distance_to(current_pose.get_origin()));
 		Vector2 finish_position = current_pose.get_origin().lerp(next_pose.get_origin(), length);
 		current_pose.set_origin(finish_position);
 

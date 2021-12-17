@@ -232,8 +232,7 @@ bool PluginScript::instance_has(const Object *p_this) const {
 }
 
 bool PluginScript::has_source_code() const {
-	bool has = _source != "";
-	return has;
+	return !_source.is_empty();
 }
 
 String PluginScript::get_source_code() const {
@@ -257,11 +256,11 @@ Error PluginScript::reload(bool p_keep_state) {
 	_valid = false;
 	String basedir = _path;
 
-	if (basedir == "") {
+	if (basedir.is_empty()) {
 		basedir = get_path();
 	}
 
-	if (basedir != "") {
+	if (!basedir.is_empty()) {
 		basedir = basedir.get_base_dir();
 	}
 
@@ -334,9 +333,9 @@ Error PluginScript::reload(bool p_keep_state) {
 		// rpc_mode is passed as an optional field and is not part of MethodInfo
 		Variant var = v["rpc_mode"];
 		if (var != Variant()) {
-			MultiplayerAPI::RPCConfig nd;
+			Multiplayer::RPCConfig nd;
 			nd.name = mi.name;
-			nd.rpc_mode = MultiplayerAPI::RPCMode(int(var));
+			nd.rpc_mode = Multiplayer::RPCMode(int(var));
 			// TODO Transfer Channel
 			if (_rpc_methods.find(nd) == -1) {
 				_rpc_methods.push_back(nd);
@@ -345,7 +344,7 @@ Error PluginScript::reload(bool p_keep_state) {
 	}
 
 	// Sort so we are 100% that they are always the same.
-	_rpc_methods.sort_custom<MultiplayerAPI::SortRPCConfig>();
+	_rpc_methods.sort_custom<Multiplayer::SortRPCConfig>();
 
 	Array *signals = (Array *)&manifest.signals;
 	for (int i = 0; i < signals->size(); ++i) {
@@ -360,13 +359,6 @@ Error PluginScript::reload(bool p_keep_state) {
 		_properties_info[pi.name] = pi;
 		_properties_default_values[pi.name] = v["default_value"];
 	}
-
-#ifdef TOOLS_ENABLED
-/*for (Set<PlaceHolderScriptInstance*>::Element *E=placeholders.front();E;E=E->next()) {
-
-        _update_placeholder(E->get());
-    }*/
-#endif
 
 	FREE_SCRIPT_MANIFEST(manifest);
 	return OK;
@@ -484,7 +476,7 @@ int PluginScript::get_member_line(const StringName &p_member) const {
 	return -1;
 }
 
-const Vector<MultiplayerAPI::RPCConfig> PluginScript::get_rpc_methods() const {
+const Vector<Multiplayer::RPCConfig> PluginScript::get_rpc_methods() const {
 	return _rpc_methods;
 }
 

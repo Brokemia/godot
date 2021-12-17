@@ -49,6 +49,12 @@ class VMap;
 SAFE_NUMERIC_TYPE_PUN_GUARANTEES(uint32_t)
 #endif
 
+// Silence a false positive warning (see GH-52119).
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wplacement-new"
+#endif
+
 template <class T>
 class CowData {
 	template <class TV>
@@ -161,7 +167,7 @@ public:
 
 	Error resize(int p_size);
 
-	_FORCE_INLINE_ void remove(int p_index) {
+	_FORCE_INLINE_ void remove_at(int p_index) {
 		ERR_FAIL_INDEX(p_index, size());
 		T *p = ptrw();
 		int len = size();
@@ -379,5 +385,9 @@ template <class T>
 CowData<T>::~CowData() {
 	_unref(_ptr);
 }
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
 #endif // COWDATA_H

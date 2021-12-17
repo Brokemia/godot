@@ -1390,6 +1390,12 @@ void QuadMesh::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "center_offset"), "set_center_offset", "get_center_offset");
 }
 
+uint32_t QuadMesh::surface_get_format(int p_idx) const {
+	ERR_FAIL_INDEX_V(p_idx, 1, 0);
+
+	return RS::ARRAY_FORMAT_VERTEX | RS::ARRAY_FORMAT_NORMAL | RS::ARRAY_FORMAT_TANGENT | RS::ARRAY_FORMAT_TEX_UV;
+}
+
 QuadMesh::QuadMesh() {
 	primitive_type = PRIMITIVE_TRIANGLES;
 }
@@ -1420,6 +1426,8 @@ void SphereMesh::_create_mesh_array(Array &p_arr) const {
 	int i, j, prevrow, thisrow, point;
 	float x, y, z;
 
+	float scale = height * (is_hemisphere ? 1.0 : 0.5);
+
 	// set our bounding box
 
 	Vector<Vector3> points;
@@ -1443,7 +1451,7 @@ void SphereMesh::_create_mesh_array(Array &p_arr) const {
 
 		v /= (rings + 1);
 		w = sin(Math_PI * v);
-		y = height * (is_hemisphere ? 1.0 : 0.5) * cos(Math_PI * v);
+		y = scale * cos(Math_PI * v);
 
 		for (i = 0; i <= radial_segments; i++) {
 			float u = i;
@@ -1458,7 +1466,8 @@ void SphereMesh::_create_mesh_array(Array &p_arr) const {
 			} else {
 				Vector3 p = Vector3(x * radius * w, y, z * radius * w);
 				points.push_back(p);
-				normals.push_back(p.normalized());
+				Vector3 normal = Vector3(x * w * scale, radius * (y / scale), z * w * scale);
+				normals.push_back(normal.normalized());
 			};
 			ADD_TANGENT(z, 0.0, -x, 1.0)
 			uvs.push_back(Vector2(u, v));

@@ -32,6 +32,7 @@
 
 #include "editor/editor_scale.h"
 #include "scene/gui/subviewport_container.h"
+#include "scene/resources/fog_material.h"
 #include "scene/resources/particles_material.h"
 #include "scene/resources/sky_material.h"
 
@@ -68,8 +69,24 @@ void MaterialEditor::edit(Ref<Material> p_material, const Ref<Environment> &p_en
 	material = p_material;
 	camera->set_environment(p_env);
 	if (!material.is_null()) {
-		sphere_instance->set_material_override(material);
-		box_instance->set_material_override(material);
+		Shader::Mode mode = p_material->get_shader_mode();
+		switch (mode) {
+			case Shader::MODE_CANVAS_ITEM:
+				layout_3d->hide();
+				layout_2d->show();
+				vc->hide();
+				rect_instance->set_material(material);
+				break;
+			case Shader::MODE_SPATIAL:
+				layout_2d->hide();
+				layout_3d->show();
+				vc->show();
+				sphere_instance->set_material_override(material);
+				box_instance->set_material_override(material);
+				break;
+			default:
+				break;
+		}
 	} else {
 		hide();
 	}
@@ -105,6 +122,21 @@ void MaterialEditor::_bind_methods() {
 }
 
 MaterialEditor::MaterialEditor() {
+	// canvas item
+
+	layout_2d = memnew(HBoxContainer);
+	layout_2d->set_alignment(BoxContainer::ALIGNMENT_CENTER);
+	add_child(layout_2d);
+	layout_2d->set_anchors_and_offsets_preset(PRESET_WIDE);
+
+	rect_instance = memnew(ColorRect);
+	layout_2d->add_child(rect_instance);
+	rect_instance->set_custom_minimum_size(Size2(150, 150) * EDSCALE);
+
+	layout_2d->set_visible(false);
+
+	// spatial
+
 	vc = memnew(SubViewportContainer);
 	vc->set_stretch(true);
 	add_child(vc);
@@ -153,12 +185,12 @@ MaterialEditor::MaterialEditor() {
 
 	set_custom_minimum_size(Size2(1, 150) * EDSCALE);
 
-	HBoxContainer *hb = memnew(HBoxContainer);
-	add_child(hb);
-	hb->set_anchors_and_offsets_preset(Control::PRESET_WIDE, Control::PRESET_MODE_MINSIZE, 2);
+	layout_3d = memnew(HBoxContainer);
+	add_child(layout_3d);
+	layout_3d->set_anchors_and_offsets_preset(Control::PRESET_WIDE, Control::PRESET_MODE_MINSIZE, 2);
 
 	VBoxContainer *vb_shape = memnew(VBoxContainer);
-	hb->add_child(vb_shape);
+	layout_3d->add_child(vb_shape);
 
 	sphere_switch = memnew(TextureButton);
 	sphere_switch->set_toggle_mode(true);
@@ -172,10 +204,10 @@ MaterialEditor::MaterialEditor() {
 	vb_shape->add_child(box_switch);
 	box_switch->connect("pressed", callable_mp(this, &MaterialEditor::_button_pressed), varray(box_switch));
 
-	hb->add_spacer();
+	layout_3d->add_spacer();
 
 	VBoxContainer *vb_light = memnew(VBoxContainer);
-	hb->add_child(vb_light);
+	layout_3d->add_child(vb_light);
 
 	light_1_switch = memnew(TextureButton);
 	light_1_switch->set_toggle_mode(true);
@@ -206,8 +238,8 @@ bool EditorInspectorPluginMaterial::can_handle(Object *p_object) {
 	if (!material) {
 		return false;
 	}
-
-	return material->get_shader_mode() == Shader::MODE_SPATIAL;
+	Shader::Mode mode = material->get_shader_mode();
+	return mode == Shader::MODE_SPATIAL || mode == Shader::MODE_CANVAS_ITEM;
 }
 
 void EditorInspectorPluginMaterial::parse_begin(Object *p_object) {
@@ -278,6 +310,54 @@ Ref<Resource> StandardMaterial3DConversionPlugin::convert(const Ref<Resource> &p
 	}
 
 	smat->set_render_priority(mat->get_render_priority());
+	smat->set_local_to_scene(mat->is_local_to_scene());
+	smat->set_name(mat->get_name());
+	return smat;
+}
+
+String ORMMaterial3DConversionPlugin::converts_to() const {
+	return "ShaderMaterial";
+}
+
+bool ORMMaterial3DConversionPlugin::handles(const Ref<Resource> &p_resource) const {
+	Ref<ORMMaterial3D> mat = p_resource;
+	return mat.is_valid();
+}
+
+Ref<Resource> ORMMaterial3DConversionPlugin::convert(const Ref<Resource> &p_resource) const {
+	Ref<ORMMaterial3D> mat = p_resource;
+	ERR_FAIL_COND_V(!mat.is_valid(), Ref<Resource>());
+
+	Ref<ShaderMaterial> smat;
+	smat.instantiate();
+
+	Ref<Shader> shader;
+	shader.instantiate();
+
+	String code = RS::get_singleton()->shader_get_code(mat->get_shader_rid());
+
+	shader->set_code(code);
+
+	smat->set_shader(shader);
+
+	List<PropertyInfo> params;
+	RS::get_singleton()->shader_get_param_list(mat->get_shader_rid(), &params);
+
+	for (const PropertyInfo &E : params) {
+		// Texture parameter has to be treated specially since ORMMaterial3D saved it
+		// as RID but ShaderMaterial needs Texture itself
+		Ref<Texture2D> texture = mat->get_texture_by_name(E.name);
+		if (texture.is_valid()) {
+			smat->set_shader_param(E.name, texture);
+		} else {
+			Variant value = RS::get_singleton()->material_get_param(mat->get_rid(), E.name);
+			smat->set_shader_param(E.name, value);
+		}
+	}
+
+	smat->set_render_priority(mat->get_render_priority());
+	smat->set_local_to_scene(mat->is_local_to_scene());
+	smat->set_name(mat->get_name());
 	return smat;
 }
 
@@ -315,6 +395,8 @@ Ref<Resource> ParticlesMaterialConversionPlugin::convert(const Ref<Resource> &p_
 	}
 
 	smat->set_render_priority(mat->get_render_priority());
+	smat->set_local_to_scene(mat->is_local_to_scene());
+	smat->set_name(mat->get_name());
 	return smat;
 }
 
@@ -352,6 +434,8 @@ Ref<Resource> CanvasItemMaterialConversionPlugin::convert(const Ref<Resource> &p
 	}
 
 	smat->set_render_priority(mat->get_render_priority());
+	smat->set_local_to_scene(mat->is_local_to_scene());
+	smat->set_name(mat->get_name());
 	return smat;
 }
 
@@ -389,6 +473,8 @@ Ref<Resource> ProceduralSkyMaterialConversionPlugin::convert(const Ref<Resource>
 	}
 
 	smat->set_render_priority(mat->get_render_priority());
+	smat->set_local_to_scene(mat->is_local_to_scene());
+	smat->set_name(mat->get_name());
 	return smat;
 }
 
@@ -426,6 +512,8 @@ Ref<Resource> PanoramaSkyMaterialConversionPlugin::convert(const Ref<Resource> &
 	}
 
 	smat->set_render_priority(mat->get_render_priority());
+	smat->set_local_to_scene(mat->is_local_to_scene());
+	smat->set_name(mat->get_name());
 	return smat;
 }
 
@@ -440,6 +528,45 @@ bool PhysicalSkyMaterialConversionPlugin::handles(const Ref<Resource> &p_resourc
 
 Ref<Resource> PhysicalSkyMaterialConversionPlugin::convert(const Ref<Resource> &p_resource) const {
 	Ref<PhysicalSkyMaterial> mat = p_resource;
+	ERR_FAIL_COND_V(!mat.is_valid(), Ref<Resource>());
+
+	Ref<ShaderMaterial> smat;
+	smat.instantiate();
+
+	Ref<Shader> shader;
+	shader.instantiate();
+
+	String code = RS::get_singleton()->shader_get_code(mat->get_shader_rid());
+
+	shader->set_code(code);
+
+	smat->set_shader(shader);
+
+	List<PropertyInfo> params;
+	RS::get_singleton()->shader_get_param_list(mat->get_shader_rid(), &params);
+
+	for (const PropertyInfo &E : params) {
+		Variant value = RS::get_singleton()->material_get_param(mat->get_rid(), E.name);
+		smat->set_shader_param(E.name, value);
+	}
+
+	smat->set_render_priority(mat->get_render_priority());
+	smat->set_local_to_scene(mat->is_local_to_scene());
+	smat->set_name(mat->get_name());
+	return smat;
+}
+
+String FogMaterialConversionPlugin::converts_to() const {
+	return "ShaderMaterial";
+}
+
+bool FogMaterialConversionPlugin::handles(const Ref<Resource> &p_resource) const {
+	Ref<FogMaterial> mat = p_resource;
+	return mat.is_valid();
+}
+
+Ref<Resource> FogMaterialConversionPlugin::convert(const Ref<Resource> &p_resource) const {
+	Ref<FogMaterial> mat = p_resource;
 	ERR_FAIL_COND_V(!mat.is_valid(), Ref<Resource>());
 
 	Ref<ShaderMaterial> smat;

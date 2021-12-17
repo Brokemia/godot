@@ -65,18 +65,21 @@ void TextEditor::_load_theme_settings() {
 String TextEditor::get_name() {
 	String name;
 
-	if (text_file->get_path().find("local://") == -1 && text_file->get_path().find("::") == -1) {
-		name = text_file->get_path().get_file();
-		if (is_unsaved()) {
-			if (text_file->get_path().is_empty()) {
-				name = TTR("[unsaved]");
-			}
-			name += "(*)";
+	name = text_file->get_path().get_file();
+	if (name.is_empty()) {
+		// This appears for newly created built-in text_files before saving the scene.
+		name = TTR("[unsaved]");
+	} else if (text_file->is_built_in()) {
+		const String &text_file_name = text_file->get_name();
+		if (!text_file_name.is_empty()) {
+			// If the built-in text_file has a custom resource name defined,
+			// display the built-in text_file name as follows: `ResourceName (scene_file.tscn)`
+			name = vformat("%s (%s)", text_file_name, name.get_slice("::", 0));
 		}
-	} else if (text_file->get_name() != "") {
-		name = text_file->get_name();
-	} else {
-		name = text_file->get_class() + "(" + itos(text_file->get_instance_id()) + ")";
+	}
+
+	if (is_unsaved()) {
+		name += "(*)";
 	}
 
 	return name;
@@ -407,10 +410,6 @@ void TextEditor::_convert_case(CodeTextEditor::CaseStyle p_case) {
 	code_editor->convert_case(p_case);
 }
 
-void TextEditor::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("add_syntax_highlighter", "highlighter"), &TextEditor::add_syntax_highlighter);
-}
-
 static ScriptEditorBase *create_editor(const RES &p_resource) {
 	if (Object::cast_to<TextFile>(*p_resource)) {
 		return memnew(TextEditor);
@@ -426,14 +425,14 @@ void TextEditor::_text_edit_gui_input(const Ref<InputEvent> &ev) {
 	Ref<InputEventMouseButton> mb = ev;
 
 	if (mb.is_valid()) {
-		if (mb->get_button_index() == MOUSE_BUTTON_RIGHT) {
+		if (mb->get_button_index() == MouseButton::RIGHT) {
 			CodeEdit *tx = code_editor->get_text_editor();
 
 			Point2i pos = tx->get_line_column_at_pos(mb->get_global_position() - tx->get_global_position());
 			int row = pos.y;
 			int col = pos.x;
 
-			tx->set_move_caret_on_right_click_enabled(EditorSettings::get_singleton()->get("text_editor/cursor/right_click_moves_caret"));
+			tx->set_move_caret_on_right_click_enabled(EditorSettings::get_singleton()->get("text_editor/behavior/navigation/move_caret_on_right_click"));
 			bool can_fold = tx->can_fold_line(row);
 			bool is_folded = tx->is_line_folded(row);
 
@@ -471,6 +470,13 @@ void TextEditor::_text_edit_gui_input(const Ref<InputEvent> &ev) {
 	}
 }
 
+void TextEditor::_prepare_edit_menu() {
+	const CodeEdit *tx = code_editor->get_text_editor();
+	PopupMenu *popup = edit_menu->get_popup();
+	popup->set_item_disabled(popup->get_item_index(EDIT_UNDO), !tx->has_undo());
+	popup->set_item_disabled(popup->get_item_index(EDIT_REDO), !tx->has_redo());
+}
+
 void TextEditor::_make_context_menu(bool p_selection, bool p_can_fold, bool p_is_folded, Vector2 p_position) {
 	context_menu->clear();
 	if (p_selection) {
@@ -497,9 +503,17 @@ void TextEditor::_make_context_menu(bool p_selection, bool p_can_fold, bool p_is
 		context_menu->add_shortcut(ED_GET_SHORTCUT("script_text_editor/toggle_fold_line"), EDIT_TOGGLE_FOLD_LINE);
 	}
 
-	context_menu->set_position(get_global_transform().xform(p_position));
-	context_menu->set_size(Vector2(1, 1));
+	const CodeEdit *tx = code_editor->get_text_editor();
+	context_menu->set_item_disabled(context_menu->get_item_index(EDIT_UNDO), !tx->has_undo());
+	context_menu->set_item_disabled(context_menu->get_item_index(EDIT_REDO), !tx->has_redo());
+
+	context_menu->set_position(get_screen_position() + p_position);
+	context_menu->reset_size();
 	context_menu->popup();
+}
+
+void TextEditor::update_toggle_scripts_button() {
+	code_editor->update_toggle_scripts_button();
 }
 
 TextEditor::TextEditor() {
@@ -510,6 +524,7 @@ TextEditor::TextEditor() {
 	code_editor->connect("validate_script", callable_mp(this, &TextEditor::_validate_script));
 	code_editor->set_anchors_and_offsets_preset(Control::PRESET_WIDE);
 	code_editor->set_v_size_flags(Control::SIZE_EXPAND_FILL);
+	code_editor->show_toggle_scripts_button();
 
 	update_settings();
 
@@ -542,6 +557,7 @@ TextEditor::TextEditor() {
 	edit_hb->add_child(edit_menu);
 	edit_menu->set_text(TTR("Edit"));
 	edit_menu->set_switch_on_hover(true);
+	edit_menu->connect("about_to_popup", callable_mp(this, &TextEditor::_prepare_edit_menu));
 	edit_menu->get_popup()->connect("id_pressed", callable_mp(this, &TextEditor::_edit_option));
 
 	edit_menu->get_popup()->add_shortcut(ED_GET_SHORTCUT("ui_undo"), EDIT_UNDO);

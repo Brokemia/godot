@@ -39,6 +39,13 @@
 #ifdef TOOLS_ENABLED
 
 static String get_type_name(const PropertyInfo &p_info) {
+	if (p_info.type == Variant::INT && (p_info.hint == PROPERTY_HINT_INT_IS_POINTER)) {
+		if (p_info.hint_string.is_empty()) {
+			return "void*";
+		} else {
+			return p_info.hint_string + "*";
+		}
+	}
 	if (p_info.type == Variant::INT && (p_info.usage & PROPERTY_USAGE_CLASS_IS_ENUM)) {
 		return String("enum::") + String(p_info.class_name);
 	}
@@ -333,7 +340,7 @@ Dictionary NativeExtensionAPIDump::generate_extension_api() {
 			int value = CoreConstants::get_global_constant_value(i);
 			String enum_name = CoreConstants::get_global_constant_enum(i);
 			String name = CoreConstants::get_global_constant_name(i);
-			if (enum_name != String()) {
+			if (!enum_name.is_empty()) {
 				enum_list[enum_name].push_back(Pair<String, int>(name, value));
 			} else {
 				Dictionary d;
@@ -346,11 +353,11 @@ Dictionary NativeExtensionAPIDump::generate_extension_api() {
 		api_dump["global_constants"] = constants;
 
 		Array enums;
-		for (Map<String, List<Pair<String, int>>>::Element *E = enum_list.front(); E; E = E->next()) {
+		for (const KeyValue<String, List<Pair<String, int>>> &E : enum_list) {
 			Dictionary d1;
-			d1["name"] = E->key();
+			d1["name"] = E.key;
 			Array values;
-			for (const Pair<String, int> &F : E->get()) {
+			for (const Pair<String, int> &F : E.value) {
 				Dictionary d2;
 				d2["name"] = F.first;
 				d2["value"] = F.second;
@@ -653,7 +660,7 @@ Dictionary NativeExtensionAPIDump::generate_extension_api() {
 				ClassDB::get_method_list(class_name, &method_list, true);
 				for (const MethodInfo &F : method_list) {
 					StringName method_name = F.name;
-					if (F.flags & METHOD_FLAG_VIRTUAL) {
+					if ((F.flags & METHOD_FLAG_VIRTUAL) && !(F.flags & METHOD_FLAG_OBJECT_CORE)) {
 						//virtual method
 						const MethodInfo &mi = F;
 						Dictionary d2;
@@ -829,6 +836,37 @@ Dictionary NativeExtensionAPIDump::generate_extension_api() {
 		if (singletons.size()) {
 			api_dump["singletons"] = singletons;
 		}
+	}
+
+	{
+		Array native_structures;
+
+		// AudioStream structures
+		{
+			Dictionary d;
+			d["name"] = "AudioFrame";
+			d["format"] = "float left,float right";
+
+			native_structures.push_back(d);
+		}
+
+		// TextServer structures
+		{
+			Dictionary d;
+			d["name"] = "Glyph";
+			d["format"] = "int start,int end,uint8_t count,uint8_t repeat,uint16_t flags,float x_off,float y_off,float advance,RID font_rid,int font_size,int32_t index";
+
+			native_structures.push_back(d);
+		}
+		{
+			Dictionary d;
+			d["name"] = "CaretInfo";
+			d["format"] = "Rect2 leading_caret,Rect2 trailing_caret,TextServer::Direction leading_direction,TextServer::Direction trailing_direction";
+
+			native_structures.push_back(d);
+		}
+
+		api_dump["native_structures"] = native_structures;
 	}
 
 	return api_dump;

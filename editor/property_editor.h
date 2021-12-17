@@ -56,6 +56,10 @@ class EditorResourceConversionPlugin : public RefCounted {
 protected:
 	static void _bind_methods();
 
+	GDVIRTUAL0RC(String, _converts_to)
+	GDVIRTUAL1RC(bool, _handles, RES)
+	GDVIRTUAL1RC(RES, _convert, RES)
+
 public:
 	virtual String converts_to() const;
 	virtual bool handles(const Ref<Resource> &p_resource) const;
@@ -106,6 +110,7 @@ class CustomPropertyEditor : public PopupPanel {
 	int focused_value_editor;
 	Label *value_label[MAX_VALUE_EDITORS];
 	HScrollBar *scroll[4];
+	HBoxContainer *action_hboxes;
 	Button *action_buttons[MAX_ACTION_BUTTONS];
 	MenuButton *type_button;
 	Vector<String> inheritors_array;

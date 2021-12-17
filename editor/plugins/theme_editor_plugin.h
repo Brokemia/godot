@@ -31,10 +31,11 @@
 #ifndef THEME_EDITOR_PLUGIN_H
 #define THEME_EDITOR_PLUGIN_H
 
+#include "scene/gui/dialogs.h"
 #include "scene/gui/margin_container.h"
 #include "scene/gui/option_button.h"
 #include "scene/gui/scroll_container.h"
-#include "scene/gui/tabs.h"
+#include "scene/gui/tab_bar.h"
 #include "scene/gui/texture_rect.h"
 #include "scene/resources/theme.h"
 #include "theme_editor_preview.h"
@@ -270,8 +271,11 @@ class ThemeTypeDialog : public ConfirmationDialog {
 	Ref<Theme> edited_theme;
 	bool include_own_types = false;
 
+	String pre_submitted_value;
+
 	LineEdit *add_type_filter;
 	ItemList *add_type_options;
+	ConfirmationDialog *add_type_confirmation;
 
 	void _dialog_about_to_show();
 	void ok_pressed() override;
@@ -282,6 +286,9 @@ class ThemeTypeDialog : public ConfirmationDialog {
 	void _add_type_options_cbk(int p_index);
 	void _add_type_dialog_entered(const String &p_value);
 	void _add_type_dialog_activated(int p_index);
+
+	void _add_type_selected(const String &p_type_name);
+	void _add_type_confirmed();
 
 protected:
 	void _notification(int p_what);
@@ -347,7 +354,6 @@ class ThemeTypeEditor : public MarginContainer {
 	void _update_type_items();
 
 	void _list_type_selected(int p_index);
-	void _select_type(String p_type_name);
 	void _add_type_button_cbk();
 	void _add_default_type_items();
 
@@ -363,7 +369,7 @@ class ThemeTypeEditor : public MarginContainer {
 	void _color_item_changed(Color p_value, String p_item_name);
 	void _constant_item_changed(float p_value, String p_item_name);
 	void _font_size_item_changed(float p_value, String p_item_name);
-	void _edit_resource_item(RES p_resource);
+	void _edit_resource_item(RES p_resource, bool p_edit);
 	void _font_item_changed(Ref<Font> p_value, String p_item_name);
 	void _icon_item_changed(Ref<Texture2D> p_value, String p_item_name);
 	void _stylebox_item_changed(Ref<StyleBox> p_value, String p_item_name);
@@ -391,7 +397,7 @@ class ThemeEditor : public VBoxContainer {
 
 	Ref<Theme> theme;
 
-	Tabs *preview_tabs;
+	TabBar *preview_tabs;
 	PanelContainer *preview_tabs_content;
 	Button *add_preview_button;
 	EditorFileDialog *preview_scene_dialog;

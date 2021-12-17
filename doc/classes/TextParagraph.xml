@@ -13,7 +13,7 @@
 			<return type="bool" />
 			<argument index="0" name="key" type="Variant" />
 			<argument index="1" name="size" type="Vector2" />
-			<argument index="2" name="inline_align" type="int" enum="InlineAlign" default="5" />
+			<argument index="2" name="inline_align" type="int" enum="InlineAlignment" default="5" />
 			<argument index="3" name="length" type="int" default="1" />
 			<description>
 				Adds inline object to the text buffer, [code]key[/code] must be unique. In the text, object is represented as [code]length[/code] object replacement characters.
@@ -199,7 +199,7 @@
 				Returns width (for horizontal layout) or height (for vertical) of the line of text.
 			</description>
 		</method>
-		<method name="get_non_wraped_size" qualifiers="const">
+		<method name="get_non_wrapped_size" qualifiers="const">
 			<return type="Vector2" />
 			<description>
 				Returns the size of the bounding box of the paragraph, without line breaks.
@@ -220,13 +220,13 @@
 		<method name="get_spacing_bottom" qualifiers="const">
 			<return type="int" />
 			<description>
-				Returns extra spacing at the bottom of the line. See [member Font.extra_spacing_bottom].
+				Returns extra spacing at the bottom of the line. See [member Font.spacing_bottom].
 			</description>
 		</method>
 		<method name="get_spacing_top" qualifiers="const">
 			<return type="int" />
 			<description>
-				Returns extra spacing at the top of the line. See [member Font.extra_spacing_top].
+				Returns extra spacing at the top of the line. See [member Font.spacing_top].
 			</description>
 		</method>
 		<method name="hit_test" qualifiers="const">
@@ -240,7 +240,7 @@
 			<return type="bool" />
 			<argument index="0" name="key" type="Variant" />
 			<argument index="1" name="size" type="Vector2" />
-			<argument index="2" name="inline_align" type="int" enum="InlineAlign" default="5" />
+			<argument index="2" name="inline_align" type="int" enum="InlineAlignment" default="5" />
 			<description>
 				Sets new size and alignment of embedded object.
 			</description>
@@ -275,13 +275,16 @@
 		</method>
 	</methods>
 	<members>
-		<member name="align" type="int" setter="set_align" getter="get_align" enum="HAlign" default="0">
+		<member name="alignment" type="int" setter="set_alignment" getter="get_alignment" enum="HorizontalAlignment" default="0">
 			Paragraph horizontal alignment.
+		</member>
+		<member name="custom_punctuation" type="String" setter="set_custom_punctuation" getter="get_custom_punctuation" default="&quot;&quot;">
+			Custom punctuation character list, used for word breaking. If set to empty string, server defaults are used.
 		</member>
 		<member name="direction" type="int" setter="set_direction" getter="get_direction" enum="TextServer.Direction" default="0">
 			Text writing direction.
 		</member>
-		<member name="flags" type="int" setter="set_flags" getter="get_flags" default="51">
+		<member name="flags" type="int" setter="set_flags" getter="get_flags" default="99">
 			Line breaking and alignment rules. For more info see [TextServer].
 		</member>
 		<member name="max_lines_visible" type="int" setter="set_max_lines_visible" getter="get_max_lines_visible" default="-1">

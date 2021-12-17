@@ -121,10 +121,10 @@ PackedStringArray get_code_completion(CompletionKind p_kind, const String &p_scr
 		case CompletionKind::NODE_PATHS: {
 			{
 				// AutoLoads
-				Map<StringName, ProjectSettings::AutoloadInfo> autoloads = ProjectSettings::get_singleton()->get_autoload_list();
+				OrderedHashMap<StringName, ProjectSettings::AutoloadInfo> autoloads = ProjectSettings::get_singleton()->get_autoload_list();
 
-				for (const KeyValue<StringName, ProjectSettings::AutoloadInfo> &E : autoloads) {
-					const ProjectSettings::AutoloadInfo &info = E.value;
+				for (OrderedHashMap<StringName, ProjectSettings::AutoloadInfo>::Element E = autoloads.front(); E; E = E.next()) {
+					const ProjectSettings::AutoloadInfo &info = E.value();
 					suggestions.push_back(quoted("/root/" + String(info.name)));
 				}
 			}
@@ -155,7 +155,7 @@ PackedStringArray get_code_completion(CompletionKind p_kind, const String &p_scr
 				dir_access->list_dir_begin();
 				String filename = dir_access->get_next();
 
-				while (filename != "") {
+				while (!filename.is_empty()) {
 					if (filename == "." || filename == "..") {
 						filename = dir_access->get_next();
 						continue;

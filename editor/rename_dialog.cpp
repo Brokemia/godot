@@ -30,22 +30,19 @@
 
 #include "rename_dialog.h"
 
+#include "modules/modules_enabled.gen.h" // For regex.
+#ifdef MODULE_REGEX_ENABLED
+
 #include "core/string/print_string.h"
 #include "editor_node.h"
 #include "editor_scale.h"
 #include "editor_settings.h"
 #include "editor_themes.h"
+#include "modules/regex/regex.h"
 #include "plugins/script_editor_plugin.h"
 #include "scene/gui/control.h"
 #include "scene/gui/label.h"
 #include "scene/gui/tab_container.h"
-
-#include "modules/modules_enabled.gen.h"
-#ifdef MODULE_REGEX_ENABLED
-#include "modules/regex/regex.h"
-#else
-#error "Can't build editor rename dialog without RegEx module."
-#endif
 
 RenameDialog::RenameDialog(SceneTreeEditor *p_scene_tree_editor, UndoRedo *p_undo_redo) {
 	scene_tree_editor = p_scene_tree_editor;
@@ -117,7 +114,7 @@ RenameDialog::RenameDialog(SceneTreeEditor *p_scene_tree_editor, UndoRedo *p_und
 	vbc->add_child(cbut_collapse_features);
 
 	tabc_features = memnew(TabContainer);
-	tabc_features->set_tab_align(TabContainer::ALIGN_LEFT);
+	tabc_features->set_tab_alignment(TabContainer::ALIGNMENT_LEFT);
 	tabc_features->set_use_hidden_tabs_for_min_size(true);
 	vbc->add_child(tabc_features);
 
@@ -463,9 +460,9 @@ String RenameDialog::_substitute(const String &subject, const Node *node, int co
 	return result;
 }
 
-void RenameDialog::_error_handler(void *p_self, const char *p_func, const char *p_file, int p_line, const char *p_error, const char *p_errorexp, ErrorHandlerType p_type) {
+void RenameDialog::_error_handler(void *p_self, const char *p_func, const char *p_file, int p_line, const char *p_error, const char *p_errorexp, bool p_editor_notify, ErrorHandlerType p_type) {
 	RenameDialog *self = (RenameDialog *)p_self;
-	String source_file(p_file);
+	String source_file = String::utf8(p_file);
 
 	// Only show first error that is related to "regex"
 	if (self->has_errors || source_file.find("regex") < 0) {
@@ -474,9 +471,9 @@ void RenameDialog::_error_handler(void *p_self, const char *p_func, const char *
 
 	String err_str;
 	if (p_errorexp && p_errorexp[0]) {
-		err_str = p_errorexp;
+		err_str = String::utf8(p_errorexp);
 	} else {
-		err_str = p_error;
+		err_str = String::utf8(p_error);
 	}
 
 	self->has_errors = true;
@@ -630,7 +627,7 @@ void RenameDialog::reset() {
 
 bool RenameDialog::_is_main_field(LineEdit *line_edit) {
 	return line_edit &&
-		   (line_edit == lne_search || line_edit == lne_replace || line_edit == lne_prefix || line_edit == lne_suffix);
+			(line_edit == lne_search || line_edit == lne_replace || line_edit == lne_prefix || line_edit == lne_suffix);
 }
 
 void RenameDialog::_insert_text(String text) {
@@ -655,3 +652,5 @@ void RenameDialog::_features_toggled(bool pressed) {
 	size.y = 0;
 	set_size(size);
 }
+
+#endif // MODULE_REGEX_ENABLED

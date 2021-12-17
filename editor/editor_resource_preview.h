@@ -43,6 +43,12 @@ class EditorResourcePreviewGenerator : public RefCounted {
 protected:
 	static void _bind_methods();
 
+	GDVIRTUAL1RC(bool, _handles, String)
+	GDVIRTUAL2RC(Ref<Texture2D>, _generate, RES, Vector2i)
+	GDVIRTUAL2RC(Ref<Texture2D>, _generate_from_path, String, Vector2i)
+	GDVIRTUAL0RC(bool, _generate_small_preview_automatically)
+	GDVIRTUAL0RC(bool, _can_generate_small_preview)
+
 public:
 	virtual bool handles(const String &p_type) const;
 	virtual Ref<Texture2D> generate(const RES &p_from, const Size2 &p_size) const;
@@ -75,6 +81,11 @@ class EditorResourcePreview : public Node {
 	SafeFlag exit;
 	SafeFlag exited;
 
+	// when running from GLES, we want to run the previews
+	// in the main thread using an update, rather than create
+	// a separate thread
+	bool _mainthread_only = false;
+
 	struct Item {
 		Ref<Texture2D> preview;
 		Ref<Texture2D> small_preview;
@@ -92,6 +103,7 @@ class EditorResourcePreview : public Node {
 
 	static void _thread_func(void *ud);
 	void _thread();
+	void _iterate();
 
 	Vector<Ref<EditorResourcePreviewGenerator>> preview_generators;
 
@@ -112,6 +124,9 @@ public:
 
 	void start();
 	void stop();
+
+	// for single threaded mode
+	void update();
 
 	EditorResourcePreview();
 	~EditorResourcePreview();

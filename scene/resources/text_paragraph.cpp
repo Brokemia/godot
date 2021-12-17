@@ -38,6 +38,11 @@ void TextParagraph::_bind_methods() {
 
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "direction", PROPERTY_HINT_ENUM, "Auto,Light-to-right,Right-to-left"), "set_direction", "get_direction");
 
+	ClassDB::bind_method(D_METHOD("set_custom_punctuation", "custom_punctuation"), &TextParagraph::set_custom_punctuation);
+	ClassDB::bind_method(D_METHOD("get_custom_punctuation"), &TextParagraph::get_custom_punctuation);
+
+	ADD_PROPERTY(PropertyInfo(Variant::STRING, "custom_punctuation"), "set_custom_punctuation", "get_custom_punctuation");
+
 	ClassDB::bind_method(D_METHOD("set_orientation", "orientation"), &TextParagraph::set_orientation);
 	ClassDB::bind_method(D_METHOD("get_orientation"), &TextParagraph::get_orientation);
 
@@ -53,19 +58,19 @@ void TextParagraph::_bind_methods() {
 
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "preserve_control"), "set_preserve_control", "get_preserve_control");
 
-	ClassDB::bind_method(D_METHOD("set_bidi_override", "override"), &TextParagraph::_set_bidi_override);
+	ClassDB::bind_method(D_METHOD("set_bidi_override", "override"), &TextParagraph::set_bidi_override);
 
 	ClassDB::bind_method(D_METHOD("set_dropcap", "text", "fonts", "size", "dropcap_margins", "opentype_features", "language"), &TextParagraph::set_dropcap, DEFVAL(Rect2()), DEFVAL(Dictionary()), DEFVAL(""));
 	ClassDB::bind_method(D_METHOD("clear_dropcap"), &TextParagraph::clear_dropcap);
 
 	ClassDB::bind_method(D_METHOD("add_string", "text", "fonts", "size", "opentype_features", "language"), &TextParagraph::add_string, DEFVAL(Dictionary()), DEFVAL(""));
-	ClassDB::bind_method(D_METHOD("add_object", "key", "size", "inline_align", "length"), &TextParagraph::add_object, DEFVAL(INLINE_ALIGN_CENTER), DEFVAL(1));
-	ClassDB::bind_method(D_METHOD("resize_object", "key", "size", "inline_align"), &TextParagraph::resize_object, DEFVAL(INLINE_ALIGN_CENTER));
+	ClassDB::bind_method(D_METHOD("add_object", "key", "size", "inline_align", "length"), &TextParagraph::add_object, DEFVAL(INLINE_ALIGNMENT_CENTER), DEFVAL(1));
+	ClassDB::bind_method(D_METHOD("resize_object", "key", "size", "inline_align"), &TextParagraph::resize_object, DEFVAL(INLINE_ALIGNMENT_CENTER));
 
-	ClassDB::bind_method(D_METHOD("set_align", "align"), &TextParagraph::set_align);
-	ClassDB::bind_method(D_METHOD("get_align"), &TextParagraph::get_align);
+	ClassDB::bind_method(D_METHOD("set_alignment", "alignment"), &TextParagraph::set_alignment);
+	ClassDB::bind_method(D_METHOD("get_alignment"), &TextParagraph::get_alignment);
 
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "align", PROPERTY_HINT_ENUM, "Left,Center,Right,Fill"), "set_align", "get_align");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "alignment", PROPERTY_HINT_ENUM, "Left,Center,Right,Fill"), "set_alignment", "get_alignment");
 
 	ClassDB::bind_method(D_METHOD("tab_align", "tab_stops"), &TextParagraph::tab_align);
 
@@ -84,7 +89,7 @@ void TextParagraph::_bind_methods() {
 
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "width"), "set_width", "get_width");
 
-	ClassDB::bind_method(D_METHOD("get_non_wraped_size"), &TextParagraph::get_non_wraped_size);
+	ClassDB::bind_method(D_METHOD("get_non_wrapped_size"), &TextParagraph::get_non_wrapped_size);
 	ClassDB::bind_method(D_METHOD("get_size"), &TextParagraph::get_size);
 
 	ClassDB::bind_method(D_METHOD("get_rid"), &TextParagraph::get_rid);
@@ -158,9 +163,9 @@ void TextParagraph::_shape_lines() {
 
 		if (h_offset > 0) {
 			// Dropcap, flow around.
-			Vector<Vector2i> line_breaks = TS->shaped_text_get_line_breaks(rid, width - h_offset, 0, flags);
-			for (int i = 0; i < line_breaks.size(); i++) {
-				RID line = TS->shaped_text_substr(rid, line_breaks[i].x, line_breaks[i].y - line_breaks[i].x);
+			PackedInt32Array line_breaks = TS->shaped_text_get_line_breaks(rid, width - h_offset, 0, flags);
+			for (int i = 0; i < line_breaks.size(); i = i + 2) {
+				RID line = TS->shaped_text_substr(rid, line_breaks[i], line_breaks[i + 1] - line_breaks[i]);
 				float h = (TS->shaped_text_get_orientation(line) == TextServer::ORIENTATION_HORIZONTAL) ? TS->shaped_text_get_size(line).y : TS->shaped_text_get_size(line).x;
 				if (v_offset < h) {
 					TS->free(line);
@@ -171,21 +176,21 @@ void TextParagraph::_shape_lines() {
 				}
 				dropcap_lines++;
 				v_offset -= h;
-				start = line_breaks[i].y;
+				start = line_breaks[i + 1];
 				lines_rid.push_back(line);
 			}
 		}
 		// Use fixed for the rest of lines.
-		Vector<Vector2i> line_breaks = TS->shaped_text_get_line_breaks(rid, width, start, flags);
-		for (int i = 0; i < line_breaks.size(); i++) {
-			RID line = TS->shaped_text_substr(rid, line_breaks[i].x, line_breaks[i].y - line_breaks[i].x);
+		PackedInt32Array line_breaks = TS->shaped_text_get_line_breaks(rid, width, start, flags);
+		for (int i = 0; i < line_breaks.size(); i = i + 2) {
+			RID line = TS->shaped_text_substr(rid, line_breaks[i], line_breaks[i + 1] - line_breaks[i]);
 			if (!tab_stops.is_empty()) {
 				TS->shaped_text_tab_align(line, tab_stops);
 			}
 			lines_rid.push_back(line);
 		}
 
-		uint8_t overrun_flags = TextServer::OVERRUN_NO_TRIMMING;
+		uint16_t overrun_flags = TextServer::OVERRUN_NO_TRIMMING;
 		if (overrun_behavior != OVERRUN_NO_TRIMMING) {
 			switch (overrun_behavior) {
 				case OVERRUN_TRIM_WORD_ELLIPSIS:
@@ -218,7 +223,7 @@ void TextParagraph::_shape_lines() {
 			if (lines_hidden) {
 				overrun_flags |= TextServer::OVERRUN_ENFORCE_ELLIPSIS;
 			}
-			if (align == HALIGN_FILL) {
+			if (alignment == HORIZONTAL_ALIGNMENT_FILL) {
 				for (int i = 0; i < lines_rid.size(); i++) {
 					if (i < visible_lines - 1 || lines_rid.size() == 1) {
 						TS->shaped_text_fit_to_width(lines_rid[i], width, flags);
@@ -234,7 +239,7 @@ void TextParagraph::_shape_lines() {
 		} else {
 			// Autowrap disabled.
 			for (int i = 0; i < lines_rid.size(); i++) {
-				if (align == HALIGN_FILL) {
+				if (alignment == HORIZONTAL_ALIGNMENT_FILL) {
 					TS->shaped_text_fit_to_width(lines_rid[i], width, flags);
 					overrun_flags |= TextServer::OVERRUN_JUSTIFICATION_AWARE;
 					TS->shaped_text_overrun_trim_to_width(lines_rid[i], width, overrun_flags);
@@ -304,6 +309,15 @@ TextServer::Direction TextParagraph::get_direction() const {
 	return TS->shaped_text_get_direction(rid);
 }
 
+void TextParagraph::set_custom_punctuation(const String &p_punct) {
+	TS->shaped_text_set_custom_punctuation(rid, p_punct);
+	lines_dirty = true;
+}
+
+String TextParagraph::get_custom_punctuation() const {
+	return TS->shaped_text_get_custom_punctuation(rid);
+}
+
 void TextParagraph::set_orientation(TextServer::Orientation p_orientation) {
 	TS->shaped_text_set_orientation(rid, p_orientation);
 	TS->shaped_text_set_orientation(dropcap_rid, p_orientation);
@@ -333,8 +347,8 @@ void TextParagraph::clear_dropcap() {
 bool TextParagraph::add_string(const String &p_text, const Ref<Font> &p_fonts, int p_size, const Dictionary &p_opentype_features, const String &p_language) {
 	ERR_FAIL_COND_V(p_fonts.is_null(), false);
 	bool res = TS->shaped_text_add_string(rid, p_text, p_fonts->get_rids(), p_size, p_opentype_features, p_language);
-	spacing_top = p_fonts->get_spacing(Font::SPACING_TOP);
-	spacing_bottom = p_fonts->get_spacing(Font::SPACING_BOTTOM);
+	spacing_top = p_fonts->get_spacing(TextServer::SPACING_TOP);
+	spacing_bottom = p_fonts->get_spacing(TextServer::SPACING_BOTTOM);
 	lines_dirty = true;
 	return res;
 }
@@ -347,44 +361,36 @@ int TextParagraph::get_spacing_bottom() const {
 	return spacing_bottom;
 }
 
-void TextParagraph::_set_bidi_override(const Array &p_override) {
-	Vector<Vector2i> overrides;
-	for (int i = 0; i < p_override.size(); i++) {
-		overrides.push_back(p_override[i]);
-	}
-	set_bidi_override(overrides);
-}
-
-void TextParagraph::set_bidi_override(const Vector<Vector2i> &p_override) {
+void TextParagraph::set_bidi_override(const Array &p_override) {
 	TS->shaped_text_set_bidi_override(rid, p_override);
 	lines_dirty = true;
 }
 
-bool TextParagraph::add_object(Variant p_key, const Size2 &p_size, InlineAlign p_inline_align, int p_length) {
+bool TextParagraph::add_object(Variant p_key, const Size2 &p_size, InlineAlignment p_inline_align, int p_length) {
 	bool res = TS->shaped_text_add_object(rid, p_key, p_size, p_inline_align, p_length);
 	lines_dirty = true;
 	return res;
 }
 
-bool TextParagraph::resize_object(Variant p_key, const Size2 &p_size, InlineAlign p_inline_align) {
+bool TextParagraph::resize_object(Variant p_key, const Size2 &p_size, InlineAlignment p_inline_align) {
 	bool res = TS->shaped_text_resize_object(rid, p_key, p_size, p_inline_align);
 	lines_dirty = true;
 	return res;
 }
 
-void TextParagraph::set_align(HAlign p_align) {
-	if (align != p_align) {
-		if (align == HALIGN_FILL || p_align == HALIGN_FILL) {
-			align = p_align;
+void TextParagraph::set_alignment(HorizontalAlignment p_alignment) {
+	if (alignment != p_alignment) {
+		if (alignment == HORIZONTAL_ALIGNMENT_FILL || p_alignment == HORIZONTAL_ALIGNMENT_FILL) {
+			alignment = p_alignment;
 			lines_dirty = true;
 		} else {
-			align = p_align;
+			alignment = p_alignment;
 		}
 	}
 }
 
-HAlign TextParagraph::get_align() const {
-	return align;
+HorizontalAlignment TextParagraph::get_alignment() const {
+	return alignment;
 }
 
 void TextParagraph::tab_align(const Vector<float> &p_tab_stops) {
@@ -392,14 +398,14 @@ void TextParagraph::tab_align(const Vector<float> &p_tab_stops) {
 	lines_dirty = true;
 }
 
-void TextParagraph::set_flags(uint8_t p_flags) {
+void TextParagraph::set_flags(uint16_t p_flags) {
 	if (flags != p_flags) {
 		flags = p_flags;
 		lines_dirty = true;
 	}
 }
 
-uint8_t TextParagraph::get_flags() const {
+uint16_t TextParagraph::get_flags() const {
 	return flags;
 }
 
@@ -425,7 +431,7 @@ float TextParagraph::get_width() const {
 	return width;
 }
 
-Size2 TextParagraph::get_non_wraped_size() const {
+Size2 TextParagraph::get_non_wrapped_size() const {
 	const_cast<TextParagraph *>(this)->_shape_lines();
 	if (TS->shaped_text_get_orientation(rid) == TextServer::ORIENTATION_HORIZONTAL) {
 		return Size2(TS->shaped_text_get_size(rid).x, TS->shaped_text_get_size(rid).y + spacing_top + spacing_bottom);
@@ -437,7 +443,8 @@ Size2 TextParagraph::get_non_wraped_size() const {
 Size2 TextParagraph::get_size() const {
 	const_cast<TextParagraph *>(this)->_shape_lines();
 	Size2 size;
-	for (int i = 0; i < lines_rid.size(); i++) {
+	int visible_lines = (max_lines_visible >= 0) ? MIN(max_lines_visible, lines_rid.size()) : lines_rid.size();
+	for (int i = 0; i < visible_lines; i++) {
 		Size2 lsize = TS->shaped_text_get_size(lines_rid[i]);
 		if (TS->shaped_text_get_orientation(lines_rid[i]) == TextServer::ORIENTATION_HORIZONTAL) {
 			size.x = MAX(size.x, lsize.x);
@@ -587,32 +594,32 @@ void TextParagraph::draw(RID p_canvas, const Vector2 &p_pos, const Color &p_colo
 				l_width -= h_offset;
 			}
 		}
-		float length = TS->shaped_text_get_width(lines_rid[i]);
+		float line_width = TS->shaped_text_get_width(lines_rid[i]);
 		if (width > 0) {
-			switch (align) {
-				case HALIGN_FILL:
+			switch (alignment) {
+				case HORIZONTAL_ALIGNMENT_FILL:
 					if (TS->shaped_text_get_direction(lines_rid[i]) == TextServer::DIRECTION_RTL) {
 						if (TS->shaped_text_get_orientation(lines_rid[i]) == TextServer::ORIENTATION_HORIZONTAL) {
-							ofs.x += l_width - length;
+							ofs.x += l_width - line_width;
 						} else {
-							ofs.y += l_width - length;
+							ofs.y += l_width - line_width;
 						}
 					}
 					break;
-				case HALIGN_LEFT:
+				case HORIZONTAL_ALIGNMENT_LEFT:
 					break;
-				case HALIGN_CENTER: {
+				case HORIZONTAL_ALIGNMENT_CENTER: {
 					if (TS->shaped_text_get_orientation(lines_rid[i]) == TextServer::ORIENTATION_HORIZONTAL) {
-						ofs.x += Math::floor((l_width - length) / 2.0);
+						ofs.x += Math::floor((l_width - line_width) / 2.0);
 					} else {
-						ofs.y += Math::floor((l_width - length) / 2.0);
+						ofs.y += Math::floor((l_width - line_width) / 2.0);
 					}
 				} break;
-				case HALIGN_RIGHT: {
+				case HORIZONTAL_ALIGNMENT_RIGHT: {
 					if (TS->shaped_text_get_orientation(lines_rid[i]) == TextServer::ORIENTATION_HORIZONTAL) {
-						ofs.x += l_width - length;
+						ofs.x += l_width - line_width;
 					} else {
-						ofs.y += l_width - length;
+						ofs.y += l_width - line_width;
 					}
 				} break;
 			}
@@ -681,8 +688,8 @@ void TextParagraph::draw_outline(RID p_canvas, const Vector2 &p_pos, int p_outli
 		}
 		float length = TS->shaped_text_get_width(lines_rid[i]);
 		if (width > 0) {
-			switch (align) {
-				case HALIGN_FILL:
+			switch (alignment) {
+				case HORIZONTAL_ALIGNMENT_FILL:
 					if (TS->shaped_text_get_direction(lines_rid[i]) == TextServer::DIRECTION_RTL) {
 						if (TS->shaped_text_get_orientation(lines_rid[i]) == TextServer::ORIENTATION_HORIZONTAL) {
 							ofs.x += l_width - length;
@@ -691,16 +698,16 @@ void TextParagraph::draw_outline(RID p_canvas, const Vector2 &p_pos, int p_outli
 						}
 					}
 					break;
-				case HALIGN_LEFT:
+				case HORIZONTAL_ALIGNMENT_LEFT:
 					break;
-				case HALIGN_CENTER: {
+				case HORIZONTAL_ALIGNMENT_CENTER: {
 					if (TS->shaped_text_get_orientation(lines_rid[i]) == TextServer::ORIENTATION_HORIZONTAL) {
 						ofs.x += Math::floor((l_width - length) / 2.0);
 					} else {
 						ofs.y += Math::floor((l_width - length) / 2.0);
 					}
 				} break;
-				case HALIGN_RIGHT: {
+				case HORIZONTAL_ALIGNMENT_RIGHT: {
 					if (TS->shaped_text_get_orientation(lines_rid[i]) == TextServer::ORIENTATION_HORIZONTAL) {
 						ofs.x += l_width - length;
 					} else {
@@ -828,8 +835,8 @@ void TextParagraph::draw_line_outline(RID p_canvas, const Vector2 &p_pos, int p_
 TextParagraph::TextParagraph(const String &p_text, const Ref<Font> &p_fonts, int p_size, const Dictionary &p_opentype_features, const String &p_language, float p_width, TextServer::Direction p_direction, TextServer::Orientation p_orientation) {
 	rid = TS->create_shaped_text(p_direction, p_orientation);
 	TS->shaped_text_add_string(rid, p_text, p_fonts->get_rids(), p_size, p_opentype_features, p_language);
-	spacing_top = p_fonts->get_spacing(Font::SPACING_TOP);
-	spacing_bottom = p_fonts->get_spacing(Font::SPACING_BOTTOM);
+	spacing_top = p_fonts->get_spacing(TextServer::SPACING_TOP);
+	spacing_bottom = p_fonts->get_spacing(TextServer::SPACING_BOTTOM);
 	width = p_width;
 }
 

@@ -198,7 +198,7 @@ String OS_Android::get_resource_dir() const {
 
 String OS_Android::get_locale() const {
 	String locale = godot_io_java->get_locale();
-	if (locale != "") {
+	if (!locale.is_empty()) {
 		return locale;
 	}
 
@@ -207,43 +207,50 @@ String OS_Android::get_locale() const {
 
 String OS_Android::get_model_name() const {
 	String model = godot_io_java->get_model();
-	if (model != "")
+	if (!model.is_empty())
 		return model;
 
 	return OS_Unix::get_model_name();
 }
 
+String OS_Android::get_data_path() const {
+	return get_user_data_dir();
+}
+
 String OS_Android::get_user_data_dir() const {
-	if (data_dir_cache != String())
+	if (!data_dir_cache.is_empty())
 		return data_dir_cache;
 
 	String data_dir = godot_io_java->get_user_data_dir();
-	if (data_dir != "") {
+	if (!data_dir.is_empty()) {
 		data_dir_cache = _remove_symlink(data_dir);
 		return data_dir_cache;
 	}
 	return ".";
 }
 
-String OS_Android::get_external_data_dir() const {
-	String data_dir = godot_io_java->get_external_data_dir();
-	if (data_dir != "") {
-		data_dir = _remove_symlink(data_dir);
-		return data_dir;
+String OS_Android::get_cache_path() const {
+	if (!cache_dir_cache.is_empty())
+		return cache_dir_cache;
+
+	String cache_dir = godot_io_java->get_cache_dir();
+	if (!cache_dir.is_empty()) {
+		cache_dir_cache = _remove_symlink(cache_dir);
+		return cache_dir_cache;
 	}
 	return ".";
 }
 
 String OS_Android::get_unique_id() const {
 	String unique_id = godot_io_java->get_unique_id();
-	if (unique_id != "")
+	if (!unique_id.is_empty())
 		return unique_id;
 
 	return OS::get_unique_id();
 }
 
-String OS_Android::get_system_dir(SystemDir p_dir) const {
-	return godot_io_java->get_system_dir(p_dir);
+String OS_Android::get_system_dir(SystemDir p_dir, bool p_shared_storage) const {
+	return godot_io_java->get_system_dir(p_dir, p_shared_storage);
 }
 
 void OS_Android::set_display_size(const Size2i &p_size) {
@@ -254,16 +261,8 @@ Size2i OS_Android::get_display_size() const {
 	return display_size;
 }
 
-void OS_Android::set_context_is_16_bits(bool p_is_16) {
-#if defined(OPENGL_ENABLED)
-	//use_16bits_fbo = p_is_16;
-	//if (rasterizer)
-	//	rasterizer->set_force_16_bits_fbo(p_is_16);
-#endif
-}
-
 void OS_Android::set_opengl_extensions(const char *p_gl_extensions) {
-#if defined(OPENGL_ENABLED)
+#if defined(GLES3_ENABLED)
 	ERR_FAIL_COND(!p_gl_extensions);
 	gl_extensions = p_gl_extensions;
 #endif
@@ -315,10 +314,9 @@ OS_Android::OS_Android(GodotJavaWrapper *p_godot_java, GodotIOJavaWrapper *p_god
 
 	main_loop = nullptr;
 
-#if defined(OPENGL_ENABLED)
+#if defined(GLES3_ENABLED)
 	gl_extensions = nullptr;
 	use_gl2 = false;
-	use_16bits_fbo = false;
 #endif
 
 #if defined(VULKAN_ENABLED)

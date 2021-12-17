@@ -190,6 +190,7 @@ class EditorFileSystem : public Node {
 
 	void _delete_internal_files(String p_file);
 
+	Set<String> textfile_extensions;
 	Set<String> valid_extensions;
 	Set<String> import_extensions;
 
@@ -254,6 +255,8 @@ class EditorFileSystem : public Node {
 	void _reimport_thread(uint32_t p_index, ImportThreadData *p_import_data);
 
 	static ResourceUID::ID _resource_saver_get_resource_id_for_path(const String &p_path, bool p_generate);
+
+	bool _scan_extensions();
 
 protected:
 	void _notification(int p_what);

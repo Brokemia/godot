@@ -88,6 +88,10 @@ Size2i Window::get_size() const {
 	return size;
 }
 
+void Window::reset_size() {
+	set_size(Size2i());
+}
+
 Size2i Window::get_real_size() const {
 	if (window_id != DisplayServer::INVALID_WINDOW_ID) {
 		return DisplayServer::get_singleton()->window_get_real_size(window_id);
@@ -300,7 +304,7 @@ void Window::_propagate_window_notification(Node *p_node, int p_notification) {
 		Node *child = p_node->get_child(i);
 		Window *window = Object::cast_to<Window>(child);
 		if (window) {
-			break;
+			continue;
 		}
 		_propagate_window_notification(child, p_notification);
 	}
@@ -659,8 +663,8 @@ void Window::_update_viewport_size() {
 		if (!use_font_oversampling) {
 			font_oversampling = 1.0;
 		}
-		if (TS->font_get_oversampling() != font_oversampling) {
-			TS->font_set_oversampling(font_oversampling);
+		if (TS->font_get_global_oversampling() != font_oversampling) {
+			TS->font_set_global_oversampling(font_oversampling);
 		}
 	}
 
@@ -895,7 +899,7 @@ void Window::_window_input(const Ref<InputEvent> &p_ev) {
 	if (EngineDebugger::is_active()) {
 		//quit from game window using F8
 		Ref<InputEventKey> k = p_ev;
-		if (k.is_valid() && k->is_pressed() && !k->is_echo() && k->get_keycode() == KEY_F8) {
+		if (k.is_valid() && k->is_pressed() && !k->is_echo() && k->get_keycode() == Key::F8) {
 			EngineDebugger::get_singleton()->send_message("request_quit", Array());
 		}
 	}
@@ -916,14 +920,14 @@ void Window::_window_input(const Ref<InputEvent> &p_ev) {
 
 	emit_signal(SceneStringNames::get_singleton()->window_input, p_ev);
 
-	input(p_ev);
+	push_input(p_ev);
 	if (!is_input_handled()) {
-		unhandled_input(p_ev);
+		push_unhandled_input(p_ev);
 	}
 }
 
 void Window::_window_input_text(const String &p_text) {
-	input_text(p_text);
+	push_text_input(p_text);
 }
 
 void Window::_window_drop_files(const Vector<String> &p_files) {
@@ -1266,6 +1270,18 @@ bool Window::has_theme_constant(const StringName &p_name, const StringName &p_th
 	return Control::has_theme_item_in_types(theme_owner, theme_owner_window, Theme::DATA_TYPE_CONSTANT, p_name, theme_types);
 }
 
+float Window::get_theme_default_base_scale() const {
+	return Control::fetch_theme_default_base_scale(theme_owner, theme_owner_window);
+}
+
+Ref<Font> Window::get_theme_default_font() const {
+	return Control::fetch_theme_default_font(theme_owner, theme_owner_window);
+}
+
+int Window::get_theme_default_font_size() const {
+	return Control::fetch_theme_default_font_size(theme_owner, theme_owner_window);
+}
+
 Rect2i Window::get_parent_rect() const {
 	ERR_FAIL_COND_V(!is_inside_tree(), Rect2i());
 	if (is_embedded()) {
@@ -1398,6 +1414,7 @@ void Window::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_size", "size"), &Window::set_size);
 	ClassDB::bind_method(D_METHOD("get_size"), &Window::get_size);
+	ClassDB::bind_method(D_METHOD("reset_size"), &Window::reset_size);
 
 	ClassDB::bind_method(D_METHOD("get_real_size"), &Window::get_real_size);
 
@@ -1480,6 +1497,10 @@ void Window::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("has_theme_color", "name", "theme_type"), &Window::has_theme_color, DEFVAL(""));
 	ClassDB::bind_method(D_METHOD("has_theme_constant", "name", "theme_type"), &Window::has_theme_constant, DEFVAL(""));
 
+	ClassDB::bind_method(D_METHOD("get_theme_default_base_scale"), &Window::get_theme_default_base_scale);
+	ClassDB::bind_method(D_METHOD("get_theme_default_font"), &Window::get_theme_default_font);
+	ClassDB::bind_method(D_METHOD("get_theme_default_font_size"), &Window::get_theme_default_font_size);
+
 	ClassDB::bind_method(D_METHOD("set_layout_direction", "direction"), &Window::set_layout_direction);
 	ClassDB::bind_method(D_METHOD("get_layout_direction"), &Window::get_layout_direction);
 	ClassDB::bind_method(D_METHOD("is_layout_rtl"), &Window::is_layout_rtl);
@@ -1497,7 +1518,7 @@ void Window::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2I, "position"), "set_position", "get_position");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2I, "size"), "set_size", "get_size");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "mode", PROPERTY_HINT_ENUM, "Windowed,Minimized,Maximized,Fullscreen"), "set_mode", "get_mode");
-	ADD_PROPERTY(PropertyInfo(Variant::STRING, "current_screen"), "set_current_screen", "get_current_screen");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "current_screen"), "set_current_screen", "get_current_screen");
 
 	ADD_GROUP("Flags", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "visible"), "set_visible", "is_visible");

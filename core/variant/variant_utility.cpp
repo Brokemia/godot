@@ -35,6 +35,8 @@
 #include "core/object/ref_counted.h"
 #include "core/os/os.h"
 #include "core/templates/oa_hash_map.h"
+#include "core/templates/rid.h"
+#include "core/templates/rid_owner.h"
 #include "core/variant/binder_common.h"
 #include "core/variant/variant_parser.h"
 
@@ -149,10 +151,10 @@ struct VariantUtilityFunctions {
 		r_error.error = Callable::CallError::CALL_OK;
 		switch (x.get_type()) {
 			case Variant::INT: {
-				return SGN(VariantInternalAccessor<int64_t>::get(&x));
+				return SIGN(VariantInternalAccessor<int64_t>::get(&x));
 			} break;
 			case Variant::FLOAT: {
-				return SGN(VariantInternalAccessor<double>::get(&x));
+				return SIGN(VariantInternalAccessor<double>::get(&x));
 			} break;
 			case Variant::VECTOR2: {
 				return VariantInternalAccessor<Vector2>::get(&x).sign();
@@ -174,11 +176,11 @@ struct VariantUtilityFunctions {
 	}
 
 	static inline double signf(double x) {
-		return SGN(x);
+		return SIGN(x);
 	}
 
 	static inline int64_t signi(int64_t x) {
-		return SGN(x);
+		return SIGN(x);
 	}
 
 	static inline double pow(double x, double y) {
@@ -265,20 +267,16 @@ struct VariantUtilityFunctions {
 		return Math::db2linear(db);
 	}
 
-	static inline Vector2 polar2cartesian(double r, double th) {
-		return Vector2(r * Math::cos(th), r * Math::sin(th));
-	}
-
-	static inline Vector2 cartesian2polar(double x, double y) {
-		return Vector2(Math::sqrt(x * x + y * y), Math::atan2(y, x));
-	}
-
 	static inline int64_t wrapi(int64_t value, int64_t min, int64_t max) {
 		return Math::wrapi(value, min, max);
 	}
 
 	static inline double wrapf(double value, double min, double max) {
 		return Math::wrapf(value, min, max);
+	}
+
+	static inline double pingpong(double value, double length) {
+		return Math::pingpong(value, length);
 	}
 
 	static inline Variant max(const Variant **p_args, int p_argcount, Callable::CallError &r_error) {
@@ -405,6 +403,10 @@ struct VariantUtilityFunctions {
 		return Math::randf();
 	}
 
+	static inline double randfn(double mean, double deviation) {
+		return Math::randfn(mean, deviation);
+	}
+
 	static inline int64_t randi_range(int64_t from, int64_t to) {
 		return Math::random((int32_t)from, (int32_t)to);
 	}
@@ -493,10 +495,6 @@ struct VariantUtilityFunctions {
 	}
 
 	static inline void print(const Variant **p_args, int p_arg_count, Callable::CallError &r_error) {
-		if (p_arg_count < 1) {
-			r_error.error = Callable::CallError::CALL_ERROR_TOO_FEW_ARGUMENTS;
-			r_error.argument = 1;
-		}
 		String str;
 		for (int i = 0; i < p_arg_count; i++) {
 			String os = p_args[i]->operator String();
@@ -512,11 +510,29 @@ struct VariantUtilityFunctions {
 		r_error.error = Callable::CallError::CALL_OK;
 	}
 
-	static inline void printerr(const Variant **p_args, int p_arg_count, Callable::CallError &r_error) {
-		if (p_arg_count < 1) {
-			r_error.error = Callable::CallError::CALL_ERROR_TOO_FEW_ARGUMENTS;
-			r_error.argument = 1;
+	static inline void print_verbose(const Variant **p_args, int p_arg_count, Callable::CallError &r_error) {
+		if (OS::get_singleton()->is_stdout_verbose()) {
+			String str;
+			for (int i = 0; i < p_arg_count; i++) {
+				String os = p_args[i]->operator String();
+
+				if (i == 0) {
+					str = os;
+				} else {
+					str += os;
+				}
+			}
+
+			// No need to use `print_verbose()` as this call already only happens
+			// when verbose mode is enabled. This avoids performing string argument concatenation
+			// when not needed.
+			print_line(str);
 		}
+
+		r_error.error = Callable::CallError::CALL_OK;
+	}
+
+	static inline void printerr(const Variant **p_args, int p_arg_count, Callable::CallError &r_error) {
 		String str;
 		for (int i = 0; i < p_arg_count; i++) {
 			String os = p_args[i]->operator String();
@@ -533,10 +549,6 @@ struct VariantUtilityFunctions {
 	}
 
 	static inline void printt(const Variant **p_args, int p_arg_count, Callable::CallError &r_error) {
-		if (p_arg_count < 1) {
-			r_error.error = Callable::CallError::CALL_ERROR_TOO_FEW_ARGUMENTS;
-			r_error.argument = 1;
-		}
 		String str;
 		for (int i = 0; i < p_arg_count; i++) {
 			if (i) {
@@ -550,10 +562,6 @@ struct VariantUtilityFunctions {
 	}
 
 	static inline void prints(const Variant **p_args, int p_arg_count, Callable::CallError &r_error) {
-		if (p_arg_count < 1) {
-			r_error.error = Callable::CallError::CALL_ERROR_TOO_FEW_ARGUMENTS;
-			r_error.argument = 1;
-		}
 		String str;
 		for (int i = 0; i < p_arg_count; i++) {
 			if (i) {
@@ -567,10 +575,6 @@ struct VariantUtilityFunctions {
 	}
 
 	static inline void printraw(const Variant **p_args, int p_arg_count, Callable::CallError &r_error) {
-		if (p_arg_count < 1) {
-			r_error.error = Callable::CallError::CALL_ERROR_TOO_FEW_ARGUMENTS;
-			r_error.argument = 1;
-		}
 		String str;
 		for (int i = 0; i < p_arg_count; i++) {
 			String os = p_args[i]->operator String();
@@ -727,6 +731,13 @@ struct VariantUtilityFunctions {
 			return false;
 		}
 		return p_instance.get_validated_object() != nullptr;
+	}
+
+	static inline uint64_t rid_allocate_id() {
+		return RID_AllocBase::_gen_id();
+	}
+	static inline RID rid_from_int64(uint64_t p_base) {
+		return RID::from_uint64(p_base);
 	}
 };
 
@@ -1205,9 +1216,6 @@ void Variant::_register_variant_utility_functions() {
 	FUNCBINDR(linear2db, sarray("lin"), Variant::UTILITY_FUNC_TYPE_MATH);
 	FUNCBINDR(db2linear, sarray("db"), Variant::UTILITY_FUNC_TYPE_MATH);
 
-	FUNCBINDR(polar2cartesian, sarray("r", "th"), Variant::UTILITY_FUNC_TYPE_MATH);
-	FUNCBINDR(cartesian2polar, sarray("x", "y"), Variant::UTILITY_FUNC_TYPE_MATH);
-
 	FUNCBINDR(wrapi, sarray("value", "min", "max"), Variant::UTILITY_FUNC_TYPE_MATH);
 	FUNCBINDR(wrapf, sarray("value", "min", "max"), Variant::UTILITY_FUNC_TYPE_MATH);
 
@@ -1226,6 +1234,7 @@ void Variant::_register_variant_utility_functions() {
 	FUNCBINDR(clampf, sarray("value", "min", "max"), Variant::UTILITY_FUNC_TYPE_MATH);
 
 	FUNCBINDR(nearest_po2, sarray("value"), Variant::UTILITY_FUNC_TYPE_MATH);
+	FUNCBINDR(pingpong, sarray("value", "length"), Variant::UTILITY_FUNC_TYPE_MATH);
 
 	// Random
 
@@ -1234,6 +1243,7 @@ void Variant::_register_variant_utility_functions() {
 	FUNCBINDR(randf, sarray(), Variant::UTILITY_FUNC_TYPE_RANDOM);
 	FUNCBINDR(randi_range, sarray("from", "to"), Variant::UTILITY_FUNC_TYPE_RANDOM);
 	FUNCBINDR(randf_range, sarray("from", "to"), Variant::UTILITY_FUNC_TYPE_RANDOM);
+	FUNCBINDR(randfn, sarray("mean", "deviation"), Variant::UTILITY_FUNC_TYPE_RANDOM);
 	FUNCBIND(seed, sarray("base"), Variant::UTILITY_FUNC_TYPE_RANDOM);
 	FUNCBINDR(rand_from_seed, sarray("seed"), Variant::UTILITY_FUNC_TYPE_RANDOM);
 
@@ -1248,6 +1258,7 @@ void Variant::_register_variant_utility_functions() {
 	FUNCBINDVARARGV(printt, sarray(), Variant::UTILITY_FUNC_TYPE_GENERAL);
 	FUNCBINDVARARGV(prints, sarray(), Variant::UTILITY_FUNC_TYPE_GENERAL);
 	FUNCBINDVARARGV(printraw, sarray(), Variant::UTILITY_FUNC_TYPE_GENERAL);
+	FUNCBINDVARARGV(print_verbose, sarray(), Variant::UTILITY_FUNC_TYPE_GENERAL);
 	FUNCBINDVARARGV(push_error, sarray(), Variant::UTILITY_FUNC_TYPE_GENERAL);
 	FUNCBINDVARARGV(push_warning, sarray(), Variant::UTILITY_FUNC_TYPE_GENERAL);
 
@@ -1265,6 +1276,9 @@ void Variant::_register_variant_utility_functions() {
 	FUNCBINDR(instance_from_id, sarray("instance_id"), Variant::UTILITY_FUNC_TYPE_GENERAL);
 	FUNCBINDR(is_instance_id_valid, sarray("id"), Variant::UTILITY_FUNC_TYPE_GENERAL);
 	FUNCBINDR(is_instance_valid, sarray("instance"), Variant::UTILITY_FUNC_TYPE_GENERAL);
+
+	FUNCBINDR(rid_allocate_id, Vector<String>(), Variant::UTILITY_FUNC_TYPE_GENERAL);
+	FUNCBINDR(rid_from_int64, sarray("base"), Variant::UTILITY_FUNC_TYPE_GENERAL);
 }
 
 void Variant::_unregister_variant_utility_functions() {
@@ -1327,6 +1341,28 @@ Variant::UtilityFunctionType Variant::get_utility_function_type(const StringName
 	}
 
 	return bfi->type;
+}
+
+MethodInfo Variant::get_utility_function_info(const StringName &p_name) {
+	MethodInfo info;
+	const VariantUtilityFunctionInfo *bfi = utility_function_table.lookup_ptr(p_name);
+	if (bfi) {
+		info.name = p_name;
+		if (bfi->returns_value && bfi->return_type == Variant::NIL) {
+			info.return_val.usage |= PROPERTY_USAGE_NIL_IS_VARIANT;
+		}
+		info.return_val.type = bfi->return_type;
+		if (bfi->is_vararg) {
+			info.flags |= METHOD_FLAG_VARARG;
+		}
+		for (int i = 0; i < bfi->argnames.size(); ++i) {
+			PropertyInfo arg;
+			arg.type = bfi->get_arg_type(i);
+			arg.name = bfi->argnames[i];
+			info.arguments.push_back(arg);
+		}
+	}
+	return info;
 }
 
 int Variant::get_utility_function_argument_count(const StringName &p_name) {

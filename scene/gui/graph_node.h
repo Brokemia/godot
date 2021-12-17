@@ -98,8 +98,13 @@ private:
 
 	Overlay overlay = OVERLAY_DISABLED;
 
+#ifdef TOOLS_ENABLED
+	void _edit_set_position(const Point2 &p_position) override;
+	void _validate_property(PropertyInfo &property) const override;
+#endif
+
 protected:
-	void _gui_input(const Ref<InputEvent> &p_ev);
+	virtual void gui_input(const Ref<InputEvent> &p_ev) override;
 	void _notification(int p_what);
 	static void _bind_methods();
 

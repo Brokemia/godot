@@ -104,9 +104,11 @@ Error HTTPRequest::request(const String &p_url, const Vector<String> &p_custom_h
 
 	CharString charstr = p_request_data.utf8();
 	size_t len = charstr.length();
-	raw_data.resize(len);
-	uint8_t *w = raw_data.ptrw();
-	memcpy(w, charstr.ptr(), len);
+	if (len > 0) {
+		raw_data.resize(len);
+		uint8_t *w = raw_data.ptrw();
+		memcpy(w, charstr.ptr(), len);
+	}
 
 	return request_raw(p_url, p_custom_headers, p_ssl_validate_domain, p_method, raw_data);
 }
@@ -241,7 +243,7 @@ bool HTTPRequest::_handle_response(bool *ret_value) {
 			}
 		}
 
-		if (new_request != "") {
+		if (!new_request.is_empty()) {
 			// Process redirect
 			client->close();
 			int new_redirs = redirections + 1; // Because _request() will clear it
@@ -361,7 +363,7 @@ bool HTTPRequest::_update_connection() {
 					return true;
 				}
 
-				if (download_to_file != String()) {
+				if (!download_to_file.is_empty()) {
 					file = FileAccess::open(download_to_file, FileAccess::WRITE);
 					if (!file) {
 						call_deferred(SNAME("_request_done"), RESULT_DOWNLOAD_FILE_CANT_OPEN, response_code, response_headers, PackedByteArray());
@@ -552,6 +554,14 @@ int HTTPRequest::get_body_size() const {
 	return body_len;
 }
 
+void HTTPRequest::set_http_proxy(const String &p_host, int p_port) {
+	client->set_http_proxy(p_host, p_port);
+}
+
+void HTTPRequest::set_https_proxy(const String &p_host, int p_port) {
+	client->set_https_proxy(p_host, p_port);
+}
+
 void HTTPRequest::set_timeout(int p_timeout) {
 	ERR_FAIL_COND(p_timeout < 0);
 	timeout = p_timeout;
@@ -597,8 +607,11 @@ void HTTPRequest::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_timeout", "timeout"), &HTTPRequest::set_timeout);
 	ClassDB::bind_method(D_METHOD("get_timeout"), &HTTPRequest::get_timeout);
 
-	ClassDB::bind_method(D_METHOD("set_download_chunk_size"), &HTTPRequest::set_download_chunk_size);
+	ClassDB::bind_method(D_METHOD("set_download_chunk_size", "chunk_size"), &HTTPRequest::set_download_chunk_size);
 	ClassDB::bind_method(D_METHOD("get_download_chunk_size"), &HTTPRequest::get_download_chunk_size);
+
+	ClassDB::bind_method(D_METHOD("set_http_proxy", "host", "port"), &HTTPRequest::set_http_proxy);
+	ClassDB::bind_method(D_METHOD("set_https_proxy", "host", "port"), &HTTPRequest::set_https_proxy);
 
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "download_file", PROPERTY_HINT_FILE), "set_download_file", "get_download_file");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "download_chunk_size", PROPERTY_HINT_RANGE, "256,16777216"), "set_download_chunk_size", "get_download_chunk_size");

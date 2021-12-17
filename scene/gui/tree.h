@@ -52,12 +52,6 @@ public:
 		CELL_MODE_CUSTOM, ///< Contains a custom value, show a string, and an edit button
 	};
 
-	enum TextAlign {
-		ALIGN_LEFT,
-		ALIGN_CENTER,
-		ALIGN_RIGHT
-	};
-
 private:
 	friend class Tree;
 
@@ -82,6 +76,7 @@ private:
 		int icon_max_w = 0;
 		bool expr = false;
 		bool checked = false;
+		bool indeterminate = false;
 		bool editable = false;
 		bool selected = false;
 		bool selectable = true;
@@ -94,7 +89,10 @@ private:
 		bool expand_right = false;
 		Color icon_color = Color(1, 1, 1);
 
-		TextAlign text_align = ALIGN_LEFT;
+		Size2i cached_minimum_size;
+		bool cached_minimum_size_dirty = true;
+
+		HorizontalAlignment text_alignment = HORIZONTAL_ALIGNMENT_LEFT;
 
 		Variant meta;
 		String tooltip;
@@ -113,6 +111,7 @@ private:
 		Vector<Button> buttons;
 
 		Ref<Font> custom_font;
+		int custom_font_size = -1;
 
 		Cell() {
 			text_buf.instantiate();
@@ -166,7 +165,7 @@ private:
 		}
 		if (parent) {
 			if (!parent->children_cache.is_empty()) {
-				parent->children_cache.remove(get_index());
+				parent->children_cache.remove_at(get_index());
 			}
 			if (parent->first_child == this) {
 				parent->first_child = next;
@@ -209,7 +208,9 @@ public:
 
 	/* check mode */
 	void set_checked(int p_column, bool p_checked);
+	void set_indeterminate(int p_column, bool p_indeterminate);
 	bool is_checked(int p_column) const;
+	bool is_indeterminate(int p_column) const;
 
 	void set_text(int p_column, String p_text);
 	String get_text(int p_column) const;
@@ -296,6 +297,9 @@ public:
 	void set_custom_font(int p_column, const Ref<Font> &p_font);
 	Ref<Font> get_custom_font(int p_column) const;
 
+	void set_custom_font_size(int p_column, int p_font_size);
+	int get_custom_font_size(int p_column) const;
+
 	void set_custom_bg_color(int p_column, const Color &p_color, bool p_bg_outline = false);
 	void clear_custom_bg_color(int p_column);
 	Color get_custom_bg_color(int p_column) const;
@@ -306,8 +310,8 @@ public:
 	void set_tooltip(int p_column, const String &p_tooltip);
 	String get_tooltip(int p_column) const;
 
-	void set_text_align(int p_column, TextAlign p_align);
-	TextAlign get_text_align(int p_column) const;
+	void set_text_alignment(int p_column, HorizontalAlignment p_alignment);
+	HorizontalAlignment get_text_alignment(int p_column) const;
 
 	void set_expand_right(int p_column, bool p_enable);
 	bool get_expand_right(int p_column) const;
@@ -349,7 +353,6 @@ public:
 };
 
 VARIANT_ENUM_CAST(TreeItem::TreeCellMode);
-VARIANT_ENUM_CAST(TreeItem::TextAlign);
 
 class VBoxContainer;
 
@@ -452,14 +455,13 @@ private:
 	void draw_item_rect(TreeItem::Cell &p_cell, const Rect2i &p_rect, const Color &p_color, const Color &p_icon_color, int p_ol_size, const Color &p_ol_color);
 	int draw_item(const Point2i &p_pos, const Point2 &p_draw_ofs, const Size2 &p_draw_size, TreeItem *p_item);
 	void select_single_item(TreeItem *p_selected, TreeItem *p_current, int p_col, TreeItem *p_prev = nullptr, bool *r_in_range = nullptr, bool p_force_deselect = false);
-	int propagate_mouse_event(const Point2i &p_pos, int x_ofs, int y_ofs, int x_limit, bool p_double_click, TreeItem *p_item, int p_button, const Ref<InputEventWithModifiers> &p_mod);
+	int propagate_mouse_event(const Point2i &p_pos, int x_ofs, int y_ofs, int x_limit, bool p_double_click, TreeItem *p_item, MouseButton p_button, const Ref<InputEventWithModifiers> &p_mod);
 	void _text_editor_submit(String p_text);
 	void _text_editor_modal_close();
 	void value_editor_changed(double p_value);
 
 	void popup_select(int p_option);
 
-	void _gui_input(Ref<InputEvent> p_event);
 	void _notification(int p_what);
 
 	void item_edited(int p_column, TreeItem *p_item, bool p_lmb = true);
@@ -491,6 +493,7 @@ private:
 
 		Ref<Texture2D> checked;
 		Ref<Texture2D> unchecked;
+		Ref<Texture2D> indeterminate;
 		Ref<Texture2D> arrow_collapsed;
 		Ref<Texture2D> arrow;
 		Ref<Texture2D> select_arrow;
@@ -505,6 +508,8 @@ private:
 		Color children_hl_line_color;
 		Color custom_button_font_highlight;
 		Color font_outline_color;
+
+		float base_scale = 1.0;
 
 		int hseparation = 0;
 		int vseparation = 0;
@@ -622,6 +627,8 @@ protected:
 	}
 
 public:
+	virtual void gui_input(const Ref<InputEvent> &p_event) override;
+
 	virtual String get_tooltip(const Point2 &p_pos) const override;
 
 	TreeItem *get_item_at_position(const Point2 &p_pos) const;

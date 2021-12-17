@@ -45,6 +45,7 @@
 #include "servers/rendering/renderer_rd/shaders/cubemap_filter_raster.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/cubemap_roughness.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/cubemap_roughness_raster.glsl.gen.h"
+#include "servers/rendering/renderer_rd/shaders/fsr_upscale.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/luminance_reduce.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/luminance_reduce_raster.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/resolve.glsl.gen.h"
@@ -68,6 +69,28 @@
 class EffectsRD {
 private:
 	bool prefer_raster_effects;
+
+	enum FSRUpscalePass {
+		FSR_UPSCALE_PASS_EASU = 0,
+		FSR_UPSCALE_PASS_RCAS = 1
+	};
+
+	struct FSRUpscalePushConstant {
+		float resolution_width;
+		float resolution_height;
+		float upscaled_width;
+		float upscaled_height;
+		float sharpness;
+		int pass;
+		int _unused0, _unused1;
+	};
+
+	struct FSRUpscale {
+		FSRUpscalePushConstant push_constant;
+		FsrUpscaleShaderRD shader;
+		RID shader_version;
+		RID pipeline;
+	} FSR_upscale;
 
 	enum BlurRasterMode {
 		BLUR_MIPMAP,
@@ -255,7 +278,7 @@ private:
 		float exposure; //  4 - 84
 		float white; //  4 - 88
 		float auto_exposure_grey; //  4 - 92
-		uint32_t pad2; //  4 - 96
+		float luminance_multiplier; //  4 - 96
 
 		float pixel_size[2]; //  8 - 104
 		uint32_t use_fxaa; //  4 - 108
@@ -308,7 +331,7 @@ private:
 		float exposure_adjust;
 		float min_luminance;
 		float max_luminance;
-		float pad[1];
+		uint32_t pad1;
 	};
 
 	struct LuminanceReduceFragment {
@@ -321,8 +344,7 @@ private:
 	struct CopyToDPPushConstant {
 		float z_far;
 		float z_near;
-		uint32_t z_flip;
-		uint32_t pad;
+		float texel_size[2];
 		float screen_rect[4];
 	};
 
@@ -755,6 +777,7 @@ private:
 public:
 	bool get_prefer_raster_effects();
 
+	void fsr_upscale(RID p_source_rd_texture, RID p_secondary_texture, RID p_destination_texture, const Size2i &p_internal_size, const Size2i &p_size, float p_fsr_upscale_sharpness);
 	void copy_to_fb_rect(RID p_source_rd_texture, RID p_dest_framebuffer, const Rect2i &p_rect, bool p_flip_y = false, bool p_force_luminance = false, bool p_alpha_to_zero = false, bool p_srgb = false, RID p_secondary = RID());
 	void copy_to_rect(RID p_source_rd_texture, RID p_dest_texture, const Rect2i &p_rect, bool p_flip_y = false, bool p_force_luminance = false, bool p_all_source = false, bool p_8_bit_dst = false, bool p_alpha_to_one = false);
 	void copy_cubemap_to_panorama(RID p_source_cube, RID p_dest_panorama, const Size2i &p_panorama_size, float p_lod, bool p_is_array);
@@ -763,14 +786,14 @@ public:
 	void copy_to_atlas_fb(RID p_source_rd_texture, RID p_dest_framebuffer, const Rect2 &p_uv_rect, RD::DrawListID p_draw_list, bool p_flip_y = false, bool p_panorama = false);
 	void gaussian_blur(RID p_source_rd_texture, RID p_texture, RID p_back_texture, const Rect2i &p_region, bool p_8bit_dst = false);
 	void set_color(RID p_dest_texture, const Color &p_color, const Rect2i &p_region, bool p_8bit_dst = false);
-	void gaussian_glow(RID p_source_rd_texture, RID p_back_texture, const Size2i &p_size, float p_strength = 1.0, bool p_high_quality = false, bool p_first_pass = false, float p_luminance_cap = 16.0, float p_exposure = 1.0, float p_bloom = 0.0, float p_hdr_bleed_treshold = 1.0, float p_hdr_bleed_scale = 1.0, RID p_auto_exposure = RID(), float p_auto_exposure_grey = 1.0);
-	void gaussian_glow_raster(RID p_source_rd_texture, RID p_framebuffer_half, RID p_rd_texture_half, RID p_dest_framebuffer, const Vector2 &p_pixel_size, float p_strength = 1.0, bool p_high_quality = false, bool p_first_pass = false, float p_luminance_cap = 16.0, float p_exposure = 1.0, float p_bloom = 0.0, float p_hdr_bleed_treshold = 1.0, float p_hdr_bleed_scale = 1.0, RID p_auto_exposure = RID(), float p_auto_exposure_grey = 1.0);
+	void gaussian_glow(RID p_source_rd_texture, RID p_back_texture, const Size2i &p_size, float p_strength = 1.0, bool p_high_quality = false, bool p_first_pass = false, float p_luminance_cap = 16.0, float p_exposure = 1.0, float p_bloom = 0.0, float p_hdr_bleed_threshold = 1.0, float p_hdr_bleed_scale = 1.0, RID p_auto_exposure = RID(), float p_auto_exposure_grey = 1.0);
+	void gaussian_glow_raster(RID p_source_rd_texture, RID p_framebuffer_half, RID p_rd_texture_half, RID p_dest_framebuffer, const Vector2 &p_pixel_size, float p_strength = 1.0, bool p_high_quality = false, bool p_first_pass = false, float p_luminance_cap = 16.0, float p_exposure = 1.0, float p_bloom = 0.0, float p_hdr_bleed_threshold = 1.0, float p_hdr_bleed_scale = 1.0, RID p_auto_exposure = RID(), float p_auto_exposure_grey = 1.0);
 
 	void cubemap_roughness(RID p_source_rd_texture, RID p_dest_texture, uint32_t p_face_id, uint32_t p_sample_count, float p_roughness, float p_size);
 	void cubemap_roughness_raster(RID p_source_rd_texture, RID p_dest_framebuffer, uint32_t p_face_id, uint32_t p_sample_count, float p_roughness, float p_size);
 	void make_mipmap(RID p_source_rd_texture, RID p_dest_texture, const Size2i &p_size);
 	void make_mipmap_raster(RID p_source_rd_texture, RID p_dest_framebuffer, const Size2i &p_size);
-	void copy_cubemap_to_dp(RID p_source_rd_texture, RID p_dest_texture, const Rect2 &p_rect, float p_z_near, float p_z_far, bool p_dp_flip);
+	void copy_cubemap_to_dp(RID p_source_rd_texture, RID p_dst_framebuffer, const Rect2 &p_rect, const Vector2 &p_dst_size, float p_z_near, float p_z_far, bool p_dp_flip);
 	void luminance_reduction(RID p_source_texture, const Size2i p_source_size, const Vector<RID> p_reduce, RID p_prev_luminance, float p_min_luminance, float p_max_luminance, float p_adjust, bool p_set = false);
 	void luminance_reduction_raster(RID p_source_texture, const Size2i p_source_size, const Vector<RID> p_reduce, Vector<RID> p_fb, RID p_prev_luminance, float p_min_luminance, float p_max_luminance, float p_adjust, bool p_set = false);
 
@@ -819,6 +842,7 @@ public:
 		bool use_auto_exposure = false;
 		float auto_exposure_grey = 0.5;
 		RID exposure_texture;
+		float luminance_multiplier = 1.0;
 
 		bool use_bcs = false;
 		float brightness = 1.0;

@@ -89,6 +89,7 @@ private:
 		real_t scale_rand = 0.0;
 		real_t hue_rot_rand = 0.0;
 		real_t anim_offset_rand = 0.0;
+		Color start_color_rand;
 		double time = 0.0;
 		double lifetime = 0.0;
 		Color base_color;
@@ -150,12 +151,13 @@ private:
 	Vector2 direction = Vector2(1, 0);
 	real_t spread = 45.0;
 
-	real_t parameters[PARAM_MAX];
-	real_t randomness[PARAM_MAX];
+	real_t parameters_min[PARAM_MAX];
+	real_t parameters_max[PARAM_MAX];
 
 	Ref<Curve> curve_parameters[PARAM_MAX];
 	Color color;
 	Ref<Gradient> color_ramp;
+	Ref<Gradient> color_initial_ramp;
 
 	bool particle_flags[PARTICLE_FLAG_MAX];
 
@@ -166,6 +168,10 @@ private:
 	Vector<Vector2> emission_normals;
 	Vector<Color> emission_colors;
 	int emission_point_count = 0;
+
+	Ref<Curve> scale_curve_x;
+	Ref<Curve> scale_curve_y;
+	bool split_scale = false;
 
 	Vector2 gravity = Vector2(0, 980);
 
@@ -197,7 +203,6 @@ public:
 	void set_explosiveness_ratio(real_t p_ratio);
 	void set_randomness_ratio(real_t p_ratio);
 	void set_lifetime_randomness(double p_random);
-	void set_visibility_aabb(const Rect2 &p_aabb);
 	void set_use_local_coordinates(bool p_enable);
 	void set_speed_scale(double p_scale);
 
@@ -209,7 +214,6 @@ public:
 	real_t get_explosiveness_ratio() const;
 	real_t get_randomness_ratio() const;
 	double get_lifetime_randomness() const;
-	Rect2 get_visibility_aabb() const;
 	bool get_use_local_coordinates() const;
 	double get_speed_scale() const;
 
@@ -222,9 +226,6 @@ public:
 	void set_draw_order(DrawOrder p_order);
 	DrawOrder get_draw_order() const;
 
-	void set_draw_passes(int p_count);
-	int get_draw_passes() const;
-
 	void set_texture(const Ref<Texture2D> &p_texture);
 	Ref<Texture2D> get_texture() const;
 
@@ -236,11 +237,11 @@ public:
 	void set_spread(real_t p_spread);
 	real_t get_spread() const;
 
-	void set_param(Parameter p_param, real_t p_value);
-	real_t get_param(Parameter p_param) const;
+	void set_param_min(Parameter p_param, real_t p_value);
+	real_t get_param_min(Parameter p_param) const;
 
-	void set_param_randomness(Parameter p_param, real_t p_value);
-	real_t get_param_randomness(Parameter p_param) const;
+	void set_param_max(Parameter p_param, real_t p_value);
+	real_t get_param_max(Parameter p_param) const;
 
 	void set_param_curve(Parameter p_param, const Ref<Curve> &p_curve);
 	Ref<Curve> get_param_curve(Parameter p_param) const;
@@ -251,6 +252,9 @@ public:
 	void set_color_ramp(const Ref<Gradient> &p_ramp);
 	Ref<Gradient> get_color_ramp() const;
 
+	void set_color_initial_ramp(const Ref<Gradient> &p_ramp);
+	Ref<Gradient> get_color_initial_ramp() const;
+
 	void set_particle_flag(ParticleFlags p_particle_flag, bool p_enable);
 	bool get_particle_flag(ParticleFlags p_particle_flag) const;
 
@@ -260,7 +264,9 @@ public:
 	void set_emission_points(const Vector<Vector2> &p_points);
 	void set_emission_normals(const Vector<Vector2> &p_normals);
 	void set_emission_colors(const Vector<Color> &p_colors);
-	void set_emission_point_count(int p_count);
+	void set_scale_curve_x(Ref<Curve> p_scale_curve);
+	void set_scale_curve_y(Ref<Curve> p_scale_curve);
+	void set_split_scale(bool p_split_scale);
 
 	EmissionShape get_emission_shape() const;
 	real_t get_emission_sphere_radius() const;
@@ -268,7 +274,9 @@ public:
 	Vector<Vector2> get_emission_points() const;
 	Vector<Vector2> get_emission_normals() const;
 	Vector<Color> get_emission_colors() const;
-	int get_emission_point_count() const;
+	Ref<Curve> get_scale_curve_x() const;
+	Ref<Curve> get_scale_curve_y() const;
+	bool get_split_scale();
 
 	void set_gravity(const Vector2 &p_gravity);
 	Vector2 get_gravity() const;

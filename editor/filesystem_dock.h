@@ -54,6 +54,7 @@
 #include "script_create_dialog.h"
 
 class EditorNode;
+class ShaderCreateDialog;
 
 class FileSystemDock : public VBoxContainer {
 	GDCLASS(FileSystemDock, VBoxContainer);
@@ -101,6 +102,7 @@ private:
 		FILE_SHOW_IN_EXPLORER,
 		FILE_COPY_PATH,
 		FILE_NEW_RESOURCE,
+		FILE_NEW_TEXTFILE,
 		FOLDER_EXPAND_ALL,
 		FOLDER_COLLAPSE_ALL,
 	};
@@ -157,6 +159,7 @@ private:
 	LineEdit *make_scene_dialog_text;
 	ConfirmationDialog *overwrite_dialog;
 	ScriptCreateDialog *make_script_dialog;
+	ShaderCreateDialog *make_shader_dialog;
 	CreateDialog *new_resource_dialog;
 
 	bool always_show_folders;
@@ -204,8 +207,6 @@ private:
 	void _set_file_display(bool p_active);
 	void _fs_changed();
 
-	void _tree_toggle_collapsed();
-
 	void _select_file(const String &p_path, bool p_select_in_favorites = false);
 	void _tree_activate_file();
 	void _file_list_activate_file(int p_idx);
@@ -227,8 +228,6 @@ private:
 
 	void _file_removed(String p_file);
 	void _folder_removed(String p_folder);
-	void _files_moved(String p_old_file, String p_new_file);
-	void _folder_moved(String p_old_folder, String p_new_folder);
 
 	void _resource_created();
 	void _make_dir_confirm();

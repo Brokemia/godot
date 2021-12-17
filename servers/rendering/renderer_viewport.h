@@ -28,8 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
 /*************************************************************************/
 
-#ifndef VISUALSERVERVIEWPORT_H
-#define VISUALSERVERVIEWPORT_H
+#ifndef RENDERER_VIEWPORT_H
+#define RENDERER_VIEWPORT_H
 
 #include "core/templates/local_vector.h"
 #include "core/templates/rid_owner.h"
@@ -49,10 +49,16 @@ public:
 
 		bool use_xr; /* use xr interface to override camera positioning and projection matrices and control output */
 
+		Size2i internal_size;
 		Size2i size;
 		RID camera;
 		RID scenario;
 
+		RS::ViewportScaling3DMode scaling_3d_mode;
+		float scaling_3d_scale = 1.0;
+		float fsr_sharpness = 0.2f;
+		float fsr_mipmap_bias = 0.0f;
+		bool fsr_enabled;
 		RS::ViewportUpdateMode update_mode;
 		RID render_target;
 		RID render_target_texture;
@@ -192,8 +198,9 @@ public:
 	int total_draw_calls_used = 0;
 
 private:
+	void _configure_3d_render_buffers(Viewport *p_viewport);
 	void _draw_3d(Viewport *p_viewport);
-	void _draw_viewport(Viewport *p_viewport, uint32_t p_view_count = 1);
+	void _draw_viewport(Viewport *p_viewport);
 
 	int occlusion_rays_per_thread = 512;
 
@@ -212,6 +219,12 @@ public:
 
 	void viewport_set_active(RID p_viewport, bool p_active);
 	void viewport_set_parent_viewport(RID p_viewport, RID p_parent_viewport);
+
+	void viewport_set_scaling_3d_mode(RID p_viewport, RS::ViewportScaling3DMode p_mode);
+	void viewport_set_scaling_3d_scale(RID p_viewport, float p_scaling_3d_scale);
+	void viewport_set_fsr_sharpness(RID p_viewport, float p_sharpness);
+	void viewport_set_fsr_mipmap_bias(RID p_viewport, float p_mipmap_bias);
+
 	void viewport_set_update_mode(RID p_viewport, RS::ViewportUpdateMode p_mode);
 	void viewport_set_vflip(RID p_viewport, bool p_enable);
 
@@ -278,4 +291,4 @@ public:
 	virtual ~RendererViewport() {}
 };
 
-#endif // VISUALSERVERVIEWPORT_H
+#endif // RENDERER_VIEWPORT_H

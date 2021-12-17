@@ -35,11 +35,12 @@
  * @class Vector
  * @author Juan Linietsky
  * Vector container. Regular Vector Container. Use with care and for smaller arrays when possible. Use Vector for large arrays.
-*/
+ */
 
 #include "core/error/error_macros.h"
 #include "core/os/memory.h"
 #include "core/templates/cowdata.h"
+#include "core/templates/search_array.h"
 #include "core/templates/sort_array.h"
 
 template <class T>
@@ -67,11 +68,11 @@ public:
 	_FORCE_INLINE_ bool append(const T &p_elem) { return push_back(p_elem); } //alias
 	void fill(T p_elem);
 
-	void remove(int p_index) { _cowdata.remove(p_index); }
+	void remove_at(int p_index) { _cowdata.remove_at(p_index); }
 	void erase(const T &p_val) {
 		int idx = find(p_val);
 		if (idx >= 0) {
-			remove(idx);
+			remove_at(idx);
 		}
 	}
 	void reverse();
@@ -92,7 +93,7 @@ public:
 
 	void append_array(Vector<T> p_other);
 
-	bool has(const T &p_val) {
+	bool has(const T &p_val) const {
 		return find(p_val, 0) != -1;
 	}
 
@@ -112,6 +113,11 @@ public:
 		sort_custom<_DefaultComparator<T>>();
 	}
 
+	int bsearch(const T &p_value, bool p_before) {
+		SearchArray<T> search;
+		return search.bisect(ptrw(), size(), p_value, p_before);
+	}
+
 	Vector<T> duplicate() {
 		return *this;
 	}
@@ -126,9 +132,8 @@ public:
 		insert(i, p_val);
 	}
 
-	inline Vector &operator=(const Vector &p_from) {
+	inline void operator=(const Vector &p_from) {
 		_cowdata._ref(p_from._cowdata);
-		return *this;
 	}
 
 	Vector<uint8_t> to_byte_array() const {
@@ -138,27 +143,28 @@ public:
 		return ret;
 	}
 
-	Vector<T> subarray(int p_from, int p_to) const {
-		if (p_from < 0) {
-			p_from = size() + p_from;
-		}
-		if (p_to < 0) {
-			p_to = size() + p_to;
-		}
+	Vector<T> slice(int p_begin, int p_end) const {
+		Vector<T> result;
 
-		ERR_FAIL_INDEX_V(p_from, size(), Vector<T>());
-		ERR_FAIL_INDEX_V(p_to, size(), Vector<T>());
-
-		Vector<T> slice;
-		int span = 1 + p_to - p_from;
-		slice.resize(span);
-		const T *r = ptr();
-		T *w = slice.ptrw();
-		for (int i = 0; i < span; ++i) {
-			w[i] = r[p_from + i];
+		if (p_end < 0) {
+			p_end += size() + 1;
 		}
 
-		return slice;
+		ERR_FAIL_INDEX_V(p_begin, size(), result);
+		ERR_FAIL_INDEX_V(p_end, size() + 1, result);
+
+		ERR_FAIL_COND_V(p_begin > p_end, result);
+
+		int result_size = p_end - p_begin;
+		result.resize(result_size);
+
+		const T *const r = ptr();
+		T *const w = result.ptrw();
+		for (int i = 0; i < result_size; ++i) {
+			w[i] = r[p_begin + i];
+		}
+
+		return result;
 	}
 
 	bool operator==(const Vector<T> &p_arr) const {
@@ -229,7 +235,7 @@ public:
 		_FORCE_INLINE_ bool operator==(const ConstIterator &b) const { return elem_ptr == b.elem_ptr; }
 		_FORCE_INLINE_ bool operator!=(const ConstIterator &b) const { return elem_ptr != b.elem_ptr; }
 
-		ConstIterator(T *p_ptr) { elem_ptr = p_ptr; }
+		ConstIterator(const T *p_ptr) { elem_ptr = p_ptr; }
 		ConstIterator() {}
 		ConstIterator(const ConstIterator &p_it) { elem_ptr = p_it.elem_ptr; }
 

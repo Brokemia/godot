@@ -7,7 +7,7 @@
 		This provides a default material with a wide variety of rendering features and properties without the need to write shader code. See the tutorial below for details.
 	</description>
 	<tutorials>
-		<link title="Spatial material">https://docs.godotengine.org/en/latest/tutorials/3d/spatial_material.html</link>
+		<link title="Standard Material 3D">$DOCS_URL/tutorials/3d/standard_material_3d.html</link>
 	</tutorials>
 	<methods>
 		<method name="get_feature" qualifiers="const">
@@ -53,6 +53,7 @@
 			<argument index="1" name="texture" type="Texture2D" />
 			<description>
 				Sets the texture for the slot specified by [code]param[/code]. See [enum TextureParam] for available slots.
+				[b]Note:[/b] When setting a roughness or metallic texture on a material that has no texture assigned to those slots, [member roughness] or [member metallic] will automatically be set to [code]1.0[/code] to ensure correct appearance.
 			</description>
 		</method>
 	</methods>
@@ -229,10 +230,11 @@
 		</member>
 		<member name="metallic" type="float" setter="set_metallic" getter="get_metallic" default="0.0">
 			A high value makes the material appear more like a metal. Non-metals use their albedo as the diffuse color and add diffuse to the specular reflection. With non-metals, the reflection appears on top of the albedo color. Metals use their albedo as a multiplier to the specular reflection and set the diffuse color to black resulting in a tinted reflection. Materials work better when fully metal or fully non-metal, values between [code]0[/code] and [code]1[/code] should only be used for blending between metal and non-metal sections. To alter the amount of reflection use [member roughness].
+			[b]Note:[/b] [member metallic] is automatically set to [code]1.0[/code] when assigning a metallic texture using [method set_texture].
 		</member>
 		<member name="metallic_specular" type="float" setter="set_specular" getter="get_specular" default="0.5">
 			Sets the size of the specular lobe. The specular lobe is the bright spot that is reflected from light sources.
-			[b]Note:[/b] unlike [member metallic], this is not energy-conserving, so it should be left at [code]0.5[/code] in most cases. See also [member roughness].
+			[b]Note:[/b] Unlike [member metallic], this is not energy-conserving, so it should be left at [code]0.5[/code] in most cases. See also [member roughness].
 		</member>
 		<member name="metallic_texture" type="Texture2D" setter="set_texture" getter="get_texture">
 			Texture used to specify metallic for an object. This is multiplied by [member metallic].
@@ -250,7 +252,8 @@
 			The strength of the normal map's effect.
 		</member>
 		<member name="normal_texture" type="Texture2D" setter="set_texture" getter="get_texture">
-			Texture used to specify the normal at a given pixel. The [code]normal_texture[/code] only uses the red and green channels. The normal read from [code]normal_texture[/code] is oriented around the surface normal provided by the [Mesh].
+			Texture used to specify the normal at a given pixel. The [code]normal_texture[/code] only uses the red and green channels; the blue and alpha channels are ignored. The normal read from [code]normal_texture[/code] is oriented around the surface normal provided by the [Mesh].
+			[b]Note:[/b] The mesh must have both normals and tangents defined in its vertex data. Otherwise, the normal map won't render correctly and will only appear to darken the whole surface. If creating geometry with [SurfaceTool], you can use [method SurfaceTool.generate_normals] and [method SurfaceTool.generate_tangents] to automatically generate normals and tangents respectively.
 			[b]Note:[/b] Godot expects the normal map to use X+, Y-, and Z+ coordinates. See [url=http://wiki.polycount.com/wiki/Normal_Map_Technical_Details#Common_Swizzle_Coordinates]this page[/url] for a comparison of normal map coordinates expected by popular engines.
 		</member>
 		<member name="orm_texture" type="Texture2D" setter="set_texture" getter="get_texture">
@@ -300,6 +303,7 @@
 		</member>
 		<member name="roughness" type="float" setter="set_roughness" getter="get_roughness" default="1.0">
 			Surface reflection. A value of [code]0[/code] represents a perfect mirror while a value of [code]1[/code] completely blurs the reflection. See also [member metallic].
+			[b]Note:[/b] [member roughness] is automatically set to [code]1.0[/code] when assigning a roughness texture using [method set_texture].
 		</member>
 		<member name="roughness_texture" type="Texture2D" setter="set_texture" getter="get_texture">
 			Texture used to control the roughness per-pixel. Multiplied by [member roughness].
@@ -351,7 +355,7 @@
 		</member>
 		<member name="use_point_size" type="bool" setter="set_flag" getter="get_flag" default="false">
 			If [code]true[/code], render point size can be changed.
-			[b]Note:[/b] this is only effective for objects whose geometry is point-based rather than triangle-based. See also [member point_size].
+			[b]Note:[/b] This is only effective for objects whose geometry is point-based rather than triangle-based. See also [member point_size].
 		</member>
 		<member name="uv1_offset" type="Vector3" setter="set_uv1_offset" getter="get_uv1_offset" default="Vector3(0, 0, 0)">
 			How much to offset the [code]UV[/code] coordinates. This amount will be added to [code]UV[/code] in the vertex function. This can be used to offset a texture.
@@ -683,7 +687,7 @@
 		</constant>
 		<constant name="BILLBOARD_PARTICLES" value="3" enum="BillboardMode">
 			Used for particle systems when assigned to [GPUParticles3D] and [CPUParticles3D] nodes. Enables [code]particles_anim_*[/code] properties.
-			The [member ParticlesMaterial.anim_speed] or [member CPUParticles3D.anim_speed] should also be set to a positive value for the animation to play.
+			The [member ParticlesMaterial.anim_speed_min] or [member CPUParticles3D.anim_speed_min] should also be set to a value bigger than zero for the animation to play.
 		</constant>
 		<constant name="TEXTURE_CHANNEL_RED" value="0" enum="TextureChannel">
 			Used to read from the red channel of a texture.

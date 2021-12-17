@@ -51,7 +51,7 @@ class AudioStreamPlaybackMP3 : public AudioStreamPlaybackResampled {
 	Ref<AudioStreamMP3> mp3_stream;
 
 protected:
-	virtual void _mix_internal(AudioFrame *p_buffer, int p_frames) override;
+	virtual int _mix_internal(AudioFrame *p_buffer, int p_frames) override;
 	virtual float get_stream_sampling_rate() override;
 
 public:
@@ -75,7 +75,7 @@ class AudioStreamMP3 : public AudioStream {
 
 	friend class AudioStreamPlaybackMP3;
 
-	void *data = nullptr;
+	PackedByteArray data;
 	uint32_t data_len = 0;
 
 	float sample_rate = 1.0;
@@ -102,6 +102,8 @@ public:
 	Vector<uint8_t> get_data() const;
 
 	virtual float get_length() const override;
+
+	virtual bool is_monophonic() const override;
 
 	AudioStreamMP3();
 	virtual ~AudioStreamMP3();

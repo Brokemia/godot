@@ -39,10 +39,10 @@ class TabContainer : public Container {
 	GDCLASS(TabContainer, Container);
 
 public:
-	enum TabAlign {
-		ALIGN_LEFT,
-		ALIGN_CENTER,
-		ALIGN_RIGHT
+	enum AlignmentMode {
+		ALIGNMENT_LEFT,
+		ALIGNMENT_CENTER,
+		ALIGNMENT_RIGHT,
 	};
 
 private:
@@ -56,8 +56,7 @@ private:
 	bool buttons_visible_cache = false;
 	bool menu_hovered = false;
 	int highlight_arrow = -1;
-	TabAlign align = ALIGN_CENTER;
-	Control *_get_tab(int p_idx) const;
+	AlignmentMode alignment = ALIGNMENT_CENTER;
 	int _get_top_margin() const;
 	mutable ObjectID popup_obj_id;
 	bool drag_to_rearrange_enabled = false;
@@ -77,7 +76,7 @@ private:
 
 protected:
 	void _child_renamed_callback();
-	void _gui_input(const Ref<InputEvent> &p_event);
+	virtual void gui_input(const Ref<InputEvent> &p_event) override;
 	void _notification(int p_what);
 	virtual void add_child_notify(Node *p_child) override;
 	virtual void move_child_notify(Node *p_child) override;
@@ -91,8 +90,8 @@ protected:
 	static void _bind_methods();
 
 public:
-	void set_tab_align(TabAlign p_align);
-	TabAlign get_tab_align() const;
+	void set_tab_alignment(AlignmentMode p_alignment);
+	AlignmentMode get_tab_alignment() const;
 
 	void set_tabs_visible(bool p_visible);
 	bool are_tabs_visible() const;
@@ -137,6 +136,6 @@ public:
 	TabContainer();
 };
 
-VARIANT_ENUM_CAST(TabContainer::TabAlign);
+VARIANT_ENUM_CAST(TabContainer::AlignmentMode);
 
 #endif // TAB_CONTAINER_H

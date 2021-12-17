@@ -104,7 +104,7 @@ public:
 				init_color_array(v);
 				break;
 			case Variant::OBJECT:
-				object_assign_null(v);
+				init_object(v);
 				break;
 			default:
 				break;
@@ -279,6 +279,10 @@ public:
 	_FORCE_INLINE_ static void init_color_array(Variant *v) {
 		v->_data.packed_array = Variant::PackedArrayRef<Color>::create(Vector<Color>());
 		v->type = Variant::PACKED_COLOR_ARRAY;
+	}
+	_FORCE_INLINE_ static void init_object(Variant *v) {
+		object_assign_null(v);
+		v->type = Variant::OBJECT;
 	}
 
 	_FORCE_INLINE_ static void clear(Variant *v) {
@@ -749,8 +753,20 @@ VARIANT_ACCESSOR_NUMBER(uint32_t)
 VARIANT_ACCESSOR_NUMBER(int64_t)
 VARIANT_ACCESSOR_NUMBER(uint64_t)
 VARIANT_ACCESSOR_NUMBER(char32_t)
+
+// Bind enums to allow using them as return types.
 VARIANT_ACCESSOR_NUMBER(Error)
 VARIANT_ACCESSOR_NUMBER(Side)
+VARIANT_ACCESSOR_NUMBER(Vector2::Axis)
+VARIANT_ACCESSOR_NUMBER(Vector2i::Axis)
+VARIANT_ACCESSOR_NUMBER(Vector3::Axis)
+VARIANT_ACCESSOR_NUMBER(Vector3i::Axis)
+
+template <>
+struct VariantInternalAccessor<Basis::EulerOrder> {
+	static _FORCE_INLINE_ Basis::EulerOrder get(const Variant *v) { return Basis::EulerOrder(*VariantInternal::get_int(v)); }
+	static _FORCE_INLINE_ void set(Variant *v, Basis::EulerOrder p_value) { *VariantInternal::get_int(v) = p_value; }
+};
 
 template <>
 struct VariantInternalAccessor<ObjectID> {
@@ -1010,6 +1026,10 @@ INITIALIZER_INT(int64_t)
 INITIALIZER_INT(char32_t)
 INITIALIZER_INT(Error)
 INITIALIZER_INT(ObjectID)
+INITIALIZER_INT(Vector2::Axis)
+INITIALIZER_INT(Vector2i::Axis)
+INITIALIZER_INT(Vector3::Axis)
+INITIALIZER_INT(Vector3i::Axis)
 
 template <>
 struct VariantInitializer<double> {
@@ -1173,7 +1193,7 @@ struct VariantInitializer<PackedColorArray> {
 
 template <>
 struct VariantInitializer<Object *> {
-	static _FORCE_INLINE_ void init(Variant *v) { VariantInternal::object_assign_null(v); }
+	static _FORCE_INLINE_ void init(Variant *v) { VariantInternal::init_object(v); }
 };
 
 template <class T>
@@ -1297,12 +1317,12 @@ struct VariantZeroAssigner<Signal> {
 
 template <>
 struct VariantZeroAssigner<Dictionary> {
-	static _FORCE_INLINE_ void zero(Variant *v) {}
+	static _FORCE_INLINE_ void zero(Variant *v) { *VariantInternal::get_dictionary(v) = Dictionary(); }
 };
 
 template <>
 struct VariantZeroAssigner<Array> {
-	static _FORCE_INLINE_ void zero(Variant *v) {}
+	static _FORCE_INLINE_ void zero(Variant *v) { *VariantInternal::get_array(v) = Array(); }
 };
 
 template <>
@@ -1402,6 +1422,24 @@ struct VariantTypeConstructor {
 
 	_FORCE_INLINE_ static void type_from_variant(void *p_value, void *p_variant) {
 		*((T *)p_value) = VariantInternalAccessor<T>::get(reinterpret_cast<Variant *>(p_variant));
+	}
+};
+
+template <>
+struct VariantTypeConstructor<Object *> {
+	_FORCE_INLINE_ static void variant_from_type(void *p_variant, void *p_value) {
+		Variant *variant = reinterpret_cast<Variant *>(p_variant);
+		VariantInitializer<Object *>::init(variant);
+		Object *value = *(reinterpret_cast<Object **>(p_value));
+		if (value) {
+			VariantInternalAccessor<Object *>::set(variant, value);
+			VariantInternalAccessor<ObjectID>::set(variant, value->get_instance_id());
+		}
+	}
+
+	_FORCE_INLINE_ static void type_from_variant(void *p_value, void *p_variant) {
+		Object **value = reinterpret_cast<Object **>(p_value);
+		*value = VariantInternalAccessor<Object *>::get(reinterpret_cast<Variant *>(p_variant));
 	}
 };
 
